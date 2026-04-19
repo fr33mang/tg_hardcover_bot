@@ -167,24 +167,33 @@ class HardcoverAPI:
     async def update_book_status(self, user_book_id: int, status_id: int) -> dict:
         gql = """
         mutation UpdateStatus($id: Int!, $status_id: Int!) {
-            update_user_book_by_pk(pk_columns: {id: $id}, _set: {status_id: $status_id}) {
+            update_user_book(id: $id, object: {status_id: $status_id}) {
                 id status_id
             }
         }
         """
         data = await self.execute_query(gql, {"id": user_book_id, "status_id": status_id})
-        return data.get("update_user_book_by_pk", {})
+        return data.get("update_user_book", {})
 
     async def rate_book(self, user_book_id: int, rating: float) -> dict:
         gql = """
         mutation RateBook($id: Int!, $rating: numeric!) {
-            update_user_book_by_pk(pk_columns: {id: $id}, _set: {rating: $rating}) {
+            update_user_book(id: $id, object: {rating: $rating}) {
                 id rating
             }
         }
         """
         data = await self.execute_query(gql, {"id": user_book_id, "rating": rating})
-        return data.get("update_user_book_by_pk", {})
+        return data.get("update_user_book", {})
+
+    async def delete_user_book(self, user_book_id: int) -> dict:
+        gql = """
+        mutation DeleteUserBook($id: Int!) {
+            delete_user_book(id: $id) { id }
+        }
+        """
+        data = await self.execute_query(gql, {"id": user_book_id})
+        return data.get("delete_user_book", {})
 
     async def add_or_update_book(self, book_id: int, status_id: int, rating: float | None = None) -> dict:
         existing = await self.get_user_book(book_id)
