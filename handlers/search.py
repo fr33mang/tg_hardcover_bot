@@ -23,17 +23,9 @@ class AddBookCallback(CallbackData, prefix="add"):
 
 def _format_book(book: dict) -> str:
     title = book.get("title", "?")
-    contributors = book.get("cached_contributors") or ""
+    authors = book.get("authors") or []
     year = book.get("release_year") or ""
-    author = ""
-    if contributors:
-        import json
-        try:
-            contribs = json.loads(contributors) if isinstance(contributors, str) else contributors
-            authors = [c.get("name", "") for c in contribs if c.get("role") in ("Author", "author", None, "")]
-            author = ", ".join(a for a in authors if a)
-        except Exception:
-            author = str(contributors)
+    author = ", ".join(authors) if authors else ""
     parts = [f"<b>{title}</b>"]
     if author:
         parts.append(author)
@@ -135,18 +127,10 @@ async def inline_search(inline_query: InlineQuery):
 
     results = []
     for book in books:
-        import json
         title = book.get("title", "?")
         slug = book.get("slug", "")
-        contributors = book.get("cached_contributors") or ""
-        author = ""
-        if contributors:
-            try:
-                contribs = json.loads(contributors) if isinstance(contributors, str) else contributors
-                authors = [c.get("name", "") for c in contribs if c.get("role") in ("Author", "author", None, "")]
-                author = ", ".join(a for a in authors if a)
-            except Exception:
-                pass
+        authors = book.get("authors") or []
+        author = ", ".join(authors) if authors else ""
 
         description = author or "Hardcover"
         text = f"<b>{title}</b>"

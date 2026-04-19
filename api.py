@@ -1,3 +1,5 @@
+import json
+
 import httpx
 from config import HARDCOVER_API_URL
 
@@ -24,49 +26,74 @@ class HardcoverAPI:
             return data["data"]
 
     async def get_me(self) -> dict | None:
-        query = """
-        query {
-            me {
-                username
-                id
-            }
-        }
-        """
+        query = "{ me { username id } }"
         data = await self.execute_query(query)
         users = data.get("me")
         return users[0] if users else None
 
     async def search_books(self, query: str, limit: int = 5) -> list[dict]:
         gql = """
-        query SearchBooks($query: String!, $limit: Int!) {
-            books(
-                where: {title: {_ilike: $query}},
-                limit: $limit,
-                order_by: {users_read_count: desc}
-            ) {
-                id
-                title
-                slug
-                cached_contributors
-                cached_image { url }
-                release_year
+        query Search($q: String!, $per_page: Int!) {
+            search(query: $q, query_type: "Book", per_page: $per_page) {
+                results
             }
         }
         """
-        data = await self.execute_query(gql, {"query": f"%{query}%", "limit": limit})
-        return data.get("books", [])
+        data = await self.execute_query(gql, {"q": query, "per_page": limit})
+        raw = data.get("search", {}).get("results", {})
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        hits = raw.get("hits", [])
+        books = []
+        for hit in hits:
+            doc = hit.get("document", {})
+            contributions = doc.get("contributions", [])
+            authors = [
+                c["author"]["name"]
+                for c in contributions
+                if c.get("author") and not c.get("contribution")
+            ]
+            books.append({
+                "id": int(doc["id"]),
+                "title": doc.get("title", ""),
+                "slug": doc.get("slug", ""),
+                "authors": authors,
+                "release_year": doc.get("release_year"),
+                "image_url": (doc.get("image") or {}).get("url"),
+            })
+        return books
 
     async def search_books_by_isbn(self, isbn: str) -> list[dict]:
         gql = """
         query SearchByISBN($isbn: String!) {
-            books(where: {book_series: {}, editions: {isbn_10: {_eq: $isbn}}}, limit: 1) {
-                id title slug cached_contributors release_year
+            editions(where: {isbn_13: {_eq: $isbn}}, limit: 1) {
+                book { id title slug release_year
+                    contributions { author { name } contribution }
+                }
             }
         }
         """
         try:
             data = await self.execute_query(gql, {"isbn": isbn})
-            return data.get("books", [])
+            editions = data.get("editions", [])
+            books = []
+            for ed in editions:
+                b = ed.get("book")
+                if not b:
+                    continue
+                authors = [
+                    c["author"]["name"]
+                    for c in (b.get("contributions") or [])
+                    if c.get("author") and not c.get("contribution")
+                ]
+                books.append({
+                    "id": b["id"],
+                    "title": b.get("title", ""),
+                    "slug": b.get("slug", ""),
+                    "authors": authors,
+                    "release_year": b.get("release_year"),
+                })
+            return books
         except Exception:
             return []
 
@@ -74,7 +101,7 @@ class HardcoverAPI:
         gql = """
         query {
             me {
-                user_books_count: user_books_aggregate(where: {status_id: {_eq: 1}}) { aggregate { count } }
+                want_count: user_books_aggregate(where: {status_id: {_eq: 1}}) { aggregate { count } }
                 reading_count: user_books_aggregate(where: {status_id: {_eq: 2}}) { aggregate { count } }
                 read_count: user_books_aggregate(where: {status_id: {_eq: 3}}) { aggregate { count } }
             }
@@ -83,7 +110,7 @@ class HardcoverAPI:
         data = await self.execute_query(gql)
         me = data.get("me", [{}])[0]
         return {
-            "want_to_read": me.get("user_books_count", {}).get("aggregate", {}).get("count", 0),
+            "want_to_read": me.get("want_count", {}).get("aggregate", {}).get("count", 0),
             "reading": me.get("reading_count", {}).get("aggregate", {}).get("count", 0),
             "read": me.get("read_count", {}).get("aggregate", {}).get("count", 0),
         }
@@ -100,8 +127,8 @@ class HardcoverAPI:
                 ) {
                     id
                     rating
-                    book {
-                        id title slug cached_contributors release_year
+                    book { id title slug release_year
+                        contributions { author { name } contribution }
                     }
                 }
             }
@@ -130,7 +157,7 @@ class HardcoverAPI:
         gql = """
         mutation AddBook($book_id: Int!, $status_id: Int!) {
             insert_user_book(object: {book_id: $book_id, status_id: $status_id}) {
-                id status_id
+                id
             }
         }
         """

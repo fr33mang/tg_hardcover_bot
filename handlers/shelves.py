@@ -77,7 +77,10 @@ async def shelf_page_callback(callback: CallbackQuery, callback_data: ShelfPageC
         title = book.get("title", "?")
         rating = ub.get("rating")
         stars = f" {'⭐' * int(rating)}" if rating else ""
-        lines.append(f"• {title}{stars}")
+        contribs = book.get("contributions") or []
+        authors = [c["author"]["name"] for c in contribs if c.get("author") and not c.get("contribution")]
+        author_str = f" — {', '.join(authors)}" if authors else ""
+        lines.append(f"• {title}{author_str}{stars}")
 
     text = "\n".join(lines)
 
