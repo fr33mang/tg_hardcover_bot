@@ -1,7 +1,7 @@
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import (
-    Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton,
+    Message, CallbackQuery, InlineKeyboardMarkup,
     InlineQuery, InlineQueryResultArticle, InputTextMessageContent,
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -13,7 +13,6 @@ from db import get_token
 router = Router()
 
 STATUS_LABELS = {1: "📚 Хочу", 2: "📖 Читаю", 3: "✅ Прочитал"}
-STATUS_NAMES = {1: "want_to_read", 2: "reading", 3: "read"}
 
 
 class AddBookCallback(CallbackData, prefix="add"):
@@ -21,12 +20,27 @@ class AddBookCallback(CallbackData, prefix="add"):
     status_id: int
 
 
-def _format_book(book: dict) -> str:
+def _dedup_authors(authors: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for a in authors:
+        key = a.lower().strip()
+        if key not in seen:
+            seen.add(key)
+            result.append(a)
+    return result
+
+
+def _format_book_line(book: dict) -> str:
     title = book.get("title", "?")
-    authors = book.get("authors") or []
+    authors = _dedup_authors(book.get("authors") or [])
     year = book.get("release_year") or ""
+    slug = book.get("slug", "")
     author = ", ".join(authors) if authors else ""
-    parts = [f"<b>{title}</b>"]
+    url = f"https://hardcover.app/books/{slug}" if slug else None
+
+    title_part = f'<a href="{url}">{title}</a>' if url else f"<b>{title}</b>"
+    parts = [title_part]
     if author:
         parts.append(author)
     if year:
@@ -34,15 +48,21 @@ def _format_book(book: dict) -> str:
     return " — ".join(parts[:2]) + (f" {parts[2]}" if len(parts) > 2 else "")
 
 
-def _build_book_keyboard(book_id: int) -> InlineKeyboardMarkup:
+def _build_results_message(books: list[dict], query: str) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [f'🔍 <b>"{query}"</b>\n']
+    for i, book in enumerate(books, 1):
+        lines.append(f"{i}. {_format_book_line(book)}")
+
     builder = InlineKeyboardBuilder()
-    for status_id, label in STATUS_LABELS.items():
-        builder.button(
-            text=label,
-            callback_data=AddBookCallback(book_id=book_id, status_id=status_id),
-        )
-    builder.adjust(3)
-    return builder.as_markup()
+    for i, book in enumerate(books, 1):
+        for status_id, label in STATUS_LABELS.items():
+            builder.button(
+                text=f"{i}: {label}",
+                callback_data=AddBookCallback(book_id=book["id"], status_id=status_id),
+            )
+        builder.adjust(3)
+
+    return "\n".join(lines), builder.as_markup()
 
 
 @router.message(Command("search"))
@@ -79,10 +99,8 @@ async def _do_search(message: Message, query: str):
         await message.answer("Книги не найдены.")
         return
 
-    for book in books:
-        text = _format_book(book)
-        kb = _build_book_keyboard(book["id"])
-        await message.answer(text, parse_mode="HTML", reply_markup=kb)
+    text, kb = _build_results_message(books, query)
+    await message.answer(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
 
 
 @router.callback_query(AddBookCallback.filter())
@@ -129,22 +147,22 @@ async def inline_search(inline_query: InlineQuery):
     for book in books:
         title = book.get("title", "?")
         slug = book.get("slug", "")
-        authors = book.get("authors") or []
+        authors = _dedup_authors(book.get("authors") or [])
         author = ", ".join(authors) if authors else ""
 
-        description = author or "Hardcover"
         text = f"<b>{title}</b>"
         if author:
             text += f"\n{author}"
         if book.get("release_year"):
             text += f" ({book['release_year']})"
-        text += f"\nhttps://hardcover.app/books/{slug}"
+        if slug:
+            text += f"\nhttps://hardcover.app/books/{slug}"
 
         results.append(
             InlineQueryResultArticle(
                 id=str(book["id"]),
                 title=title,
-                description=description,
+                description=author or "Hardcover",
                 input_message_content=InputTextMessageContent(
                     message_text=text, parse_mode="HTML"
                 ),

@@ -19,6 +19,22 @@ class ShelfPageCallback(CallbackData, prefix="shelf"):
     offset: int
 
 
+def _dedup_authors_by_id(contribs: list[dict]) -> list[str]:
+    seen_ids = set()
+    names = []
+    for c in contribs:
+        author = c.get("author")
+        if not author or c.get("contribution"):
+            continue
+        aid = author.get("id")
+        if aid and aid in seen_ids:
+            continue
+        if aid:
+            seen_ids.add(aid)
+        names.append(author["name"])
+    return names
+
+
 @router.message(Command("shelves"))
 async def cmd_shelves(message: Message):
     token = await get_token(message.from_user.id)
@@ -71,16 +87,18 @@ async def shelf_page_callback(callback: CallbackQuery, callback_data: ShelfPageC
         await callback.answer("Полка пуста.", show_alert=True)
         return
 
-    lines = [f"{STATUS_EMOJI[status_id]} <b>{STATUS_NAMES[status_id]}</b> (стр. {offset // PAGE_SIZE + 1})\n"]
+    page = offset // PAGE_SIZE + 1
+    lines = [f"{STATUS_EMOJI[status_id]} <b>{STATUS_NAMES[status_id]}</b> (стр. {page})\n"]
     for ub in books:
         book = ub.get("book", {})
         title = book.get("title", "?")
+        slug = book.get("slug", "")
         rating = ub.get("rating")
         stars = f" {'⭐' * int(rating)}" if rating else ""
-        contribs = book.get("contributions") or []
-        authors = [c["author"]["name"] for c in contribs if c.get("author") and not c.get("contribution")]
+        authors = _dedup_authors_by_id(book.get("contributions") or [])
         author_str = f" — {', '.join(authors)}" if authors else ""
-        lines.append(f"• {title}{author_str}{stars}")
+        link = f'<a href="https://hardcover.app/books/{slug}">{title}</a>' if slug else title
+        lines.append(f"• {link}{author_str}{stars}")
 
     text = "\n".join(lines)
 
@@ -98,7 +116,7 @@ async def shelf_page_callback(callback: CallbackQuery, callback_data: ShelfPageC
     builder.adjust(2)
 
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
     except Exception:
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
     await callback.answer()

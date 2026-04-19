@@ -128,7 +128,7 @@ class HardcoverAPI:
                     id
                     rating
                     book { id title slug release_year
-                        contributions { author { name } contribution }
+                        contributions { author { id name } contribution }
                     }
                 }
             }
