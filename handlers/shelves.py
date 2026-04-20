@@ -1,10 +1,11 @@
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from api import HardcoverAPI
+from callbacks import BookDetailCallback
 from db import get_token
 
 router = Router()
@@ -17,6 +18,10 @@ STATUS_EMOJI = {1: "📚", 2: "📖", 3: "✅"}
 class ShelfPageCallback(CallbackData, prefix="shelf"):
     status_id: int
     offset: int
+
+
+class BackToShelvesCallback(CallbackData, prefix="shelves_back"):
+    pass
 
 
 def _dedup_authors_by_id(contribs: list[dict]) -> list[str]:
@@ -66,6 +71,38 @@ async def cmd_shelves(message: Message):
     await message.answer("Ваши полки:", reply_markup=builder.as_markup())
 
 
+@router.callback_query(BackToShelvesCallback.filter())
+async def back_to_shelves_callback(callback: CallbackQuery):
+    token = await get_token(callback.from_user.id)
+    if not token:
+        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        return
+
+    api = HardcoverAPI(token)
+    try:
+        counts = await api.get_my_shelves()
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        return
+
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=f"📚 Хочу прочитать ({counts['want_to_read']})",
+        callback_data=ShelfPageCallback(status_id=1, offset=0),
+    )
+    builder.button(
+        text=f"📖 Читаю ({counts['reading']})",
+        callback_data=ShelfPageCallback(status_id=2, offset=0),
+    )
+    builder.button(
+        text=f"✅ Прочитал ({counts['read']})",
+        callback_data=ShelfPageCallback(status_id=3, offset=0),
+    )
+    builder.adjust(1)
+    await callback.message.edit_text("Ваши полки:", reply_markup=builder.as_markup())
+    await callback.answer()
+
+
 @router.callback_query(ShelfPageCallback.filter())
 async def shelf_page_callback(callback: CallbackQuery, callback_data: ShelfPageCallback):
     token = await get_token(callback.from_user.id)
@@ -89,31 +126,51 @@ async def shelf_page_callback(callback: CallbackQuery, callback_data: ShelfPageC
 
     page = offset // PAGE_SIZE + 1
     lines = [f"{STATUS_EMOJI[status_id]} <b>{STATUS_NAMES[status_id]}</b> (стр. {page})\n"]
-    for ub in books:
+    book_ids = []
+    for i, ub in enumerate(books, 1):
         book = ub.get("book", {})
         title = book.get("title", "?")
         slug = book.get("slug", "")
         rating = ub.get("rating")
         stars = f" {'⭐' * int(rating)}" if rating else ""
         authors = _dedup_authors_by_id(book.get("contributions") or [])
-        author_str = f" — {', '.join(authors)}" if authors else ""
-        link = f'<a href="https://hardcover.app/books/{slug}">{title}</a>' if slug else title
-        lines.append(f"• {link}{author_str}{stars}")
+        if len(authors) > 2:
+            author_str = f" — {', '.join(authors[:2])} и др."
+        elif authors:
+            author_str = f" — {', '.join(authors)}"
+        else:
+            author_str = ""
+        hc_link = f' <a href="https://hardcover.app/books/{slug}">🔗</a>' if slug else ""
+        lines.append(f"{i}. <b>{title}</b>{author_str}{stars}{hc_link}")
+        book_ids.append(book.get("id"))
 
+    lines.append("\n<i>Нажмите на номер для управления книгой</i>")
     text = "\n".join(lines)
 
     builder = InlineKeyboardBuilder()
+
+    num_btns = [
+        InlineKeyboardButton(text=str(i), callback_data=BookDetailCallback(book_id=bid).pack())
+        for i, bid in enumerate(book_ids, 1)
+    ]
+    for i in range(0, len(num_btns), 5):
+        builder.row(*num_btns[i:i + 5])
+
+    nav_btns = []
     if offset > 0:
-        builder.button(
+        nav_btns.append(InlineKeyboardButton(
             text="← Назад",
-            callback_data=ShelfPageCallback(status_id=status_id, offset=offset - PAGE_SIZE),
-        )
+            callback_data=ShelfPageCallback(status_id=status_id, offset=offset - PAGE_SIZE).pack(),
+        ))
     if len(books) == PAGE_SIZE:
-        builder.button(
+        nav_btns.append(InlineKeyboardButton(
             text="Вперёд →",
-            callback_data=ShelfPageCallback(status_id=status_id, offset=offset + PAGE_SIZE),
-        )
-    builder.adjust(2)
+            callback_data=ShelfPageCallback(status_id=status_id, offset=offset + PAGE_SIZE).pack(),
+        ))
+    if nav_btns:
+        builder.row(*nav_btns)
+
+    builder.row(InlineKeyboardButton(text="📋 Все полки", callback_data=BackToShelvesCallback().pack()))
 
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)

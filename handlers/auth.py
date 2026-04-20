@@ -51,6 +51,8 @@ async def cmd_token(message: Message, state: FSMContext):
 async def process_token(message: Message, state: FSMContext):
     await state.clear()
     token = message.text.strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
 
     try:
         await message.delete()

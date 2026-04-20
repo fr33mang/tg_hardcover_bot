@@ -1,23 +1,29 @@
+import asyncio
+import html
+import logging
+
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import (
-    Message, CallbackQuery, InlineKeyboardMarkup,
+    Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton,
     InlineQuery, InlineQueryResultArticle, InputTextMessageContent,
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
 
 from api import HardcoverAPI
+from callbacks import BookDetailCallback, AddBookCallback, DeleteBookCallback
 from db import get_token
 
 router = Router()
 
 STATUS_LABELS = {1: "📚 Хочу", 2: "📖 Читаю", 3: "✅ Прочитал"}
+SEARCH_PAGE_SIZE = 5
 
 
-class AddBookCallback(CallbackData, prefix="add"):
-    book_id: int
-    status_id: int
+class SearchPageCallback(CallbackData, prefix="search"):
+    query: str
+    page: int
 
 
 def _dedup_authors(authors: list[str]) -> list[str]:
@@ -31,38 +37,100 @@ def _dedup_authors(authors: list[str]) -> list[str]:
     return result
 
 
+def _book_url(book: dict) -> str | None:
+    slug = book.get("slug", "")
+    return f"https://hardcover.app/books/{slug}" if slug else None
+
+
 def _format_book_line(book: dict) -> str:
     title = book.get("title", "?")
     authors = _dedup_authors(book.get("authors") or [])
     year = book.get("release_year") or ""
-    slug = book.get("slug", "")
     author = ", ".join(authors) if authors else ""
-    url = f"https://hardcover.app/books/{slug}" if slug else None
 
-    title_part = f'<a href="{url}">{title}</a>' if url else f"<b>{title}</b>"
-    parts = [title_part]
+    url = _book_url(book)
+    safe_title = html.escape(title)
+    link = f' <a href="{url}">🔗</a>' if url else ""
+    if len(authors) > 2:
+        author = html.escape(", ".join(authors[:2])) + " и др."
+    elif author:
+        author = html.escape(author)
+    parts = [f"<b>{safe_title}</b>"]
     if author:
         parts.append(author)
     if year:
         parts.append(f"({year})")
-    return " — ".join(parts[:2]) + (f" {parts[2]}" if len(parts) > 2 else "")
+    line = " — ".join(parts[:2]) + (f" {parts[2]}" if len(parts) > 2 else "")
+    return line + link
 
 
-def _build_results_message(books: list[dict], query: str) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [f'🔍 <b>"{query}"</b>\n']
+def _build_results_message(books: list[dict], query: str, page: int = 1) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [f'🔍 <b>"{html.escape(query)}"</b>\n']
     for i, book in enumerate(books, 1):
         lines.append(f"{i}. {_format_book_line(book)}")
+    lines.append("\n<i>Нажмите на номер книги для подробностей</i>")
 
     builder = InlineKeyboardBuilder()
-    for i, book in enumerate(books, 1):
-        for status_id, label in STATUS_LABELS.items():
-            builder.button(
-                text=f"{i}: {label}",
-                callback_data=AddBookCallback(book_id=book["id"], status_id=status_id),
-            )
-        builder.adjust(3)
+    builder.row(*[
+        InlineKeyboardButton(text=str(i), callback_data=BookDetailCallback(book_id=book["id"]).pack())
+        for i, book in enumerate(books, 1)
+    ])
+
+    nav = []
+    if page > 1:
+        nav.append(InlineKeyboardButton(text="← Назад", callback_data=SearchPageCallback(query=query, page=page - 1).pack()))
+    if len(books) == SEARCH_PAGE_SIZE:
+        nav.append(InlineKeyboardButton(text="Ещё →", callback_data=SearchPageCallback(query=query, page=page + 1).pack()))
+    if nav:
+        builder.row(*nav)
 
     return "\n".join(lines), builder.as_markup()
+
+
+def _build_book_detail_text(book: dict) -> str:
+    title = book.get("title", "?")
+    authors = _dedup_authors(book.get("authors") or [])
+    year = book.get("release_year")
+    slug = book.get("slug", "")
+    description = book.get("description") or ""
+    rating = book.get("rating")
+    ratings_count = book.get("ratings_count")
+
+    safe_title = html.escape(title)
+    meta = []
+    if authors:
+        meta.append(html.escape(", ".join(authors)))
+    if year:
+        meta.append(str(year))
+
+    lines = [f"<b>{safe_title}</b>"]
+    if meta:
+        lines.append(" · ".join(meta))
+    if rating:
+        stars = f"<b>{rating:.1f}</b> ⭐"
+        if ratings_count:
+            stars += f" ({ratings_count} оценок)"
+        lines.append(stars)
+    if description:
+        desc = html.escape(description.strip())
+        if len(desc) > 800:
+            desc = desc[:800].rstrip() + "…"
+        lines.append(f"\n{desc}")
+
+    return "\n".join(lines)
+
+
+def _build_book_buttons(book_id: int, current_status_id: int | None = None, book_url: str | None = None) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for status_id, label in STATUS_LABELS.items():
+        text = f"● {label}" if status_id == current_status_id else label
+        builder.button(text=text, callback_data=AddBookCallback(book_id=book_id, status_id=status_id))
+    builder.adjust(3)
+    if current_status_id:
+        builder.row(InlineKeyboardButton(text="🗑 Удалить с полки", callback_data=DeleteBookCallback(book_id=book_id).pack()))
+    if book_url:
+        builder.row(InlineKeyboardButton(text="🔗 Открыть на Hardcover", url=book_url))
+    return builder.as_markup()
 
 
 @router.message(Command("search"))
@@ -90,7 +158,7 @@ async def _do_search(message: Message, query: str):
 
     api = HardcoverAPI(token)
     try:
-        books = await api.search_books(query)
+        books = await api.search_books(query, limit=SEARCH_PAGE_SIZE, page=1)
     except Exception as e:
         await message.answer(f"Ошибка поиска: {e}")
         return
@@ -99,8 +167,71 @@ async def _do_search(message: Message, query: str):
         await message.answer("Книги не найдены.")
         return
 
-    text, kb = _build_results_message(books, query)
+    text, kb = _build_results_message(books, query, page=1)
     await message.answer(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+
+
+@router.callback_query(SearchPageCallback.filter())
+async def search_page_callback(callback: CallbackQuery, callback_data: SearchPageCallback):
+    token = await get_token(callback.from_user.id)
+    if not token:
+        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        return
+
+    api = HardcoverAPI(token)
+    try:
+        books = await api.search_books(callback_data.query, limit=SEARCH_PAGE_SIZE, page=callback_data.page)
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        return
+
+    if not books:
+        await callback.answer("Больше результатов нет.", show_alert=True)
+        return
+
+    text, kb = _build_results_message(books, callback_data.query, page=callback_data.page)
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+    await callback.answer()
+
+
+@router.callback_query(BookDetailCallback.filter())
+async def book_detail_callback(callback: CallbackQuery, callback_data: BookDetailCallback):
+    token = await get_token(callback.from_user.id)
+    if not token:
+        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        return
+
+    await callback.answer()
+
+    api = HardcoverAPI(token)
+    try:
+        book, user_book = await asyncio.gather(
+            api.get_book(callback_data.book_id),
+            api.get_user_book(callback_data.book_id),
+        )
+    except Exception as e:
+        await callback.message.answer(f"Ошибка загрузки книги: {e}")
+        return
+
+    if not book:
+        await callback.message.answer("Книга не найдена.")
+        return
+
+    current_status_id = user_book["status_id"] if user_book else None
+    url = _book_url(book)
+    text = _build_book_detail_text(book)
+    kb = _build_book_buttons(book["id"], current_status_id, book_url=url)
+    image_url = book.get("image_url")
+
+    if image_url:
+        await callback.message.answer_photo(
+            photo=image_url,
+            caption=text,
+            parse_mode="HTML",
+            reply_markup=kb,
+        )
+    else:
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
 
 
 @router.callback_query(AddBookCallback.filter())
@@ -113,8 +244,41 @@ async def add_book_callback(callback: CallbackQuery, callback_data: AddBookCallb
     api = HardcoverAPI(token)
     try:
         await api.add_or_update_book(callback_data.book_id, callback_data.status_id)
+        book = await api.get_book(callback_data.book_id)
+        url = _book_url(book) if book else None
+        new_kb = _build_book_buttons(callback_data.book_id, callback_data.status_id, book_url=url)
+        try:
+            await callback.message.edit_reply_markup(reply_markup=new_kb)
+        except Exception as e:
+            logging.warning("edit_reply_markup failed: %s", e)
         label = STATUS_LABELS[callback_data.status_id]
         await callback.answer(f"{label} — добавлено!")
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@router.callback_query(DeleteBookCallback.filter())
+async def delete_book_callback(callback: CallbackQuery, callback_data: DeleteBookCallback):
+    token = await get_token(callback.from_user.id)
+    if not token:
+        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        return
+
+    api = HardcoverAPI(token)
+    try:
+        user_book, book = await asyncio.gather(
+            api.get_user_book(callback_data.book_id),
+            api.get_book(callback_data.book_id),
+        )
+        if user_book:
+            await api.delete_user_book(user_book["id"])
+        url = _book_url(book) if book else None
+        new_kb = _build_book_buttons(callback_data.book_id, None, book_url=url)
+        try:
+            await callback.message.edit_reply_markup(reply_markup=new_kb)
+        except Exception as e:
+            logging.warning("edit_reply_markup failed: %s", e)
+        await callback.answer("Книга удалена с полки.")
     except Exception as e:
         await callback.answer(f"Ошибка: {e}", show_alert=True)
 

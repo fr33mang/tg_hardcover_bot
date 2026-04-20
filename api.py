@@ -31,15 +31,15 @@ class HardcoverAPI:
         users = data.get("me")
         return users[0] if users else None
 
-    async def search_books(self, query: str, limit: int = 5) -> list[dict]:
+    async def search_books(self, query: str, limit: int = 5, page: int = 1) -> list[dict]:
         gql = """
-        query Search($q: String!, $per_page: Int!) {
-            search(query: $q, query_type: "Book", per_page: $per_page) {
+        query Search($q: String!, $per_page: Int!, $page: Int!) {
+            search(query: $q, query_type: "Book", per_page: $per_page, page: $page) {
                 results
             }
         }
         """
-        data = await self.execute_query(gql, {"q": query, "per_page": limit})
+        data = await self.execute_query(gql, {"q": query, "per_page": limit, "page": page})
         raw = data.get("search", {}).get("results", {})
         if isinstance(raw, str):
             raw = json.loads(raw)
@@ -168,7 +168,7 @@ class HardcoverAPI:
         gql = """
         mutation UpdateStatus($id: Int!, $status_id: Int!) {
             update_user_book(id: $id, object: {status_id: $status_id}) {
-                id status_id
+                id
             }
         }
         """
@@ -194,6 +194,41 @@ class HardcoverAPI:
         """
         data = await self.execute_query(gql, {"id": user_book_id})
         return data.get("delete_user_book", {})
+
+    async def get_book(self, book_id: int) -> dict | None:
+        gql = """
+        query GetBook($id: Int!) {
+            books(where: {id: {_eq: $id}}) {
+                id title slug release_year description
+                image { url }
+                contributions { author { name } contribution }
+                ratings_count
+                rating
+            }
+        }
+        """
+        data = await self.execute_query(gql, {"id": book_id})
+        books = data.get("books", [])
+        if not books:
+            return None
+        b = books[0]
+        contributions = b.get("contributions") or []
+        authors = [
+            c["author"]["name"]
+            for c in contributions
+            if c.get("author") and not c.get("contribution")
+        ]
+        return {
+            "id": b["id"],
+            "title": b.get("title", ""),
+            "slug": b.get("slug", ""),
+            "authors": authors,
+            "release_year": b.get("release_year"),
+            "description": b.get("description"),
+            "image_url": (b.get("image") or {}).get("url"),
+            "rating": b.get("rating"),
+            "ratings_count": b.get("ratings_count"),
+        }
 
     async def add_or_update_book(self, book_id: int, status_id: int, rating: float | None = None) -> dict:
         existing = await self.get_user_book(book_id)
