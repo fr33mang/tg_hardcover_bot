@@ -2,6 +2,8 @@
 
 Telegram bot for [Hardcover.app](https://hardcover.app) — search books, manage your library and lists.
 
+> **Disclaimer:** This is an unofficial bot and is not affiliated with or endorsed by Hardcover. It uses the [Hardcover public API](https://hardcover.app/account/api).
+
 ## Features
 
 - **Search** — find books by title or ISBN, browse paginated results
