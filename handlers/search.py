@@ -117,7 +117,6 @@ def _build_book_detail_text(book: dict) -> str:
     title = book.get("title", "?")
     authors = _dedup_authors(book.get("authors") or [])
     year = book.get("release_year")
-    slug = book.get("slug", "")
     description = book.get("description") or ""
     rating = book.get("rating")
     ratings_count = book.get("ratings_count")
