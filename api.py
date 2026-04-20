@@ -1,6 +1,7 @@
 import json
 
 import httpx
+
 from config import HARDCOVER_API_URL
 
 
@@ -48,19 +49,17 @@ class HardcoverAPI:
         for hit in hits:
             doc = hit.get("document", {})
             contributions = doc.get("contributions", [])
-            authors = [
-                c["author"]["name"]
-                for c in contributions
-                if c.get("author") and not c.get("contribution")
-            ]
-            books.append({
-                "id": int(doc["id"]),
-                "title": doc.get("title", ""),
-                "slug": doc.get("slug", ""),
-                "authors": authors,
-                "release_year": doc.get("release_year"),
-                "image_url": (doc.get("image") or {}).get("url"),
-            })
+            authors = [c["author"]["name"] for c in contributions if c.get("author") and not c.get("contribution")]
+            books.append(
+                {
+                    "id": int(doc["id"]),
+                    "title": doc.get("title", ""),
+                    "slug": doc.get("slug", ""),
+                    "authors": authors,
+                    "release_year": doc.get("release_year"),
+                    "image_url": (doc.get("image") or {}).get("url"),
+                }
+            )
         return books
 
     async def search_books_by_isbn(self, isbn: str) -> list[dict]:
@@ -86,13 +85,15 @@ class HardcoverAPI:
                     for c in (b.get("contributions") or [])
                     if c.get("author") and not c.get("contribution")
                 ]
-                books.append({
-                    "id": b["id"],
-                    "title": b.get("title", ""),
-                    "slug": b.get("slug", ""),
-                    "authors": authors,
-                    "release_year": b.get("release_year"),
-                })
+                books.append(
+                    {
+                        "id": b["id"],
+                        "title": b.get("title", ""),
+                        "slug": b.get("slug", ""),
+                        "authors": authors,
+                        "release_year": b.get("release_year"),
+                    }
+                )
             return books
         except Exception:
             return []
@@ -235,11 +236,7 @@ class HardcoverAPI:
             return None
         b = books[0]
         contributions = b.get("contributions") or []
-        authors = [
-            c["author"]["name"]
-            for c in contributions
-            if c.get("author") and not c.get("contribution")
-        ]
+        authors = [c["author"]["name"] for c in contributions if c.get("author") and not c.get("contribution")]
         return {
             "id": b["id"],
             "title": b.get("title", ""),

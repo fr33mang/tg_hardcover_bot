@@ -1,7 +1,7 @@
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from api import HardcoverAPI
@@ -77,16 +77,20 @@ async def _send_library(api: HardcoverAPI, message: Message = None, callback: Ca
     for status_id, (emoji, name) in STATUS_LABELS.items():
         count = counts.get(status_id, 0)
         if count > 0:
-            builder.row(InlineKeyboardButton(
-                text=f"{emoji} {name} ({count})",
-                callback_data=ShelfPageCallback(status_id=status_id, offset=0).pack(),
-            ))
+            builder.row(
+                InlineKeyboardButton(
+                    text=f"{emoji} {name} ({count})",
+                    callback_data=ShelfPageCallback(status_id=status_id, offset=0).pack(),
+                )
+            )
 
     for lst in lists:
-        builder.row(InlineKeyboardButton(
-            text=f"🔖 {lst['name']} ({lst['books_count']})",
-            callback_data=ListPageCallback(list_id=lst["id"], offset=0).pack(),
-        ))
+        builder.row(
+            InlineKeyboardButton(
+                text=f"🔖 {lst['name']} ({lst['books_count']})",
+                callback_data=ListPageCallback(list_id=lst["id"], offset=0).pack(),
+            )
+        )
 
     text = "📖 <b>Библиотека</b>"
     kb = builder.as_markup()
@@ -124,8 +128,9 @@ async def back_to_library_callback(callback: CallbackQuery):
         await callback.answer(f"Ошибка: {e}", show_alert=True)
 
 
-def _build_book_list(items: list[dict], title: str, offset: int,
-                     back_cb: str, prev_cb: str | None, next_cb: str | None) -> tuple[str, any]:
+def _build_book_list(
+    items: list[dict], title: str, offset: int, back_cb: str, prev_cb: str | None, next_cb: str | None
+) -> tuple[str, any]:
     page = offset // PAGE_SIZE + 1
     lines = [f"{title} (стр. {page})\n"]
     book_ids = []
@@ -144,7 +149,7 @@ def _build_book_list(items: list[dict], title: str, offset: int,
         for i, bid in enumerate(book_ids, 1)
     ]
     for i in range(0, len(num_btns), 5):
-        builder.row(*num_btns[i:i + 5])
+        builder.row(*num_btns[i : i + 5])
 
     nav_btns = []
     if prev_cb:
@@ -183,7 +188,9 @@ async def shelf_page_callback(callback: CallbackQuery, callback_data: ShelfPageC
     emoji, name = STATUS_LABELS[status_id]
     title = f"{emoji} <b>{name}</b>"
     prev_cb = ShelfPageCallback(status_id=status_id, offset=offset - PAGE_SIZE).pack() if offset > 0 else None
-    next_cb = ShelfPageCallback(status_id=status_id, offset=offset + PAGE_SIZE).pack() if len(books) == PAGE_SIZE else None
+    next_cb = (
+        ShelfPageCallback(status_id=status_id, offset=offset + PAGE_SIZE).pack() if len(books) == PAGE_SIZE else None
+    )
     back_cb = BackToLibraryCallback().pack()
 
     text, kb = _build_book_list(books, title, offset, back_cb, prev_cb, next_cb)

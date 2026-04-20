@@ -1,11 +1,11 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from api import HardcoverAPI
-from db import save_token, delete_token, get_token
+from db import delete_token, get_token, save_token
 
 router = Router()
 
@@ -18,9 +18,7 @@ class AuthStates(StatesGroup):
 async def cmd_start(message: Message):
     has_token = await get_token(message.from_user.id)
     if has_token:
-        await message.answer(
-            "Вы уже авторизованы. Используйте /shelves, /search или /import."
-        )
+        await message.answer("Вы уже авторизованы. Используйте /shelves, /search или /import.")
         return
     await message.answer(
         "👋 Привет! Это бот для Hardcover.\n\n"

@@ -1,4 +1,5 @@
 import aiosqlite
+
 from config import DATABASE_PATH
 
 
@@ -30,9 +31,7 @@ async def save_token(telegram_id: int, token: str, username: str | None = None):
 
 async def get_token(telegram_id: int) -> str | None:
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        async with db.execute(
-            "SELECT bearer_token FROM users WHERE telegram_id = ?", (telegram_id,)
-        ) as cursor:
+        async with db.execute("SELECT bearer_token FROM users WHERE telegram_id = ?", (telegram_id,)) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else None
 

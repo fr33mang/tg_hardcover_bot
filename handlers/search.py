@@ -2,19 +2,29 @@ import asyncio
 import html
 import logging
 
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.filters import Command
+from aiogram.filters.callback_data import CallbackData
 from aiogram.types import (
-    Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton,
-    InlineQuery, InlineQueryResultArticle, InputTextMessageContent,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InlineQuery,
+    InlineQueryResultArticle,
+    InputTextMessageContent,
+    Message,
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.filters.callback_data import CallbackData
 
 from api import HardcoverAPI
 from callbacks import (
-    BookDetailCallback, AddBookCallback, DeleteBookCallback,
-    ShowListsCallback, AddToListCallback, BackToBookCallback, CloseMessageCallback,
+    AddBookCallback,
+    AddToListCallback,
+    BackToBookCallback,
+    BookDetailCallback,
+    CloseMessageCallback,
+    DeleteBookCallback,
+    ShowListsCallback,
 )
 from db import get_token
 
@@ -81,16 +91,22 @@ def _build_results_message(books: list[dict], query: str, page: int = 1) -> tupl
     lines.append("\n<i>Нажмите на номер книги для подробностей</i>")
 
     builder = InlineKeyboardBuilder()
-    builder.row(*[
-        InlineKeyboardButton(text=str(i), callback_data=BookDetailCallback(book_id=book["id"]).pack())
-        for i, book in enumerate(books, 1)
-    ])
+    builder.row(
+        *[
+            InlineKeyboardButton(text=str(i), callback_data=BookDetailCallback(book_id=book["id"]).pack())
+            for i, book in enumerate(books, 1)
+        ]
+    )
 
     nav = []
     if page > 1:
-        nav.append(InlineKeyboardButton(text="← Назад", callback_data=SearchPageCallback(query=query, page=page - 1).pack()))
+        nav.append(
+            InlineKeyboardButton(text="← Назад", callback_data=SearchPageCallback(query=query, page=page - 1).pack())
+        )
     if len(books) == SEARCH_PAGE_SIZE:
-        nav.append(InlineKeyboardButton(text="Ещё →", callback_data=SearchPageCallback(query=query, page=page + 1).pack()))
+        nav.append(
+            InlineKeyboardButton(text="Ещё →", callback_data=SearchPageCallback(query=query, page=page + 1).pack())
+        )
     if nav:
         builder.row(*nav)
 
@@ -130,14 +146,18 @@ def _build_book_detail_text(book: dict) -> str:
     return "\n".join(lines)
 
 
-def _build_book_buttons(book_id: int, current_status_id: int | None = None, book_url: str | None = None) -> InlineKeyboardMarkup:
+def _build_book_buttons(
+    book_id: int, current_status_id: int | None = None, book_url: str | None = None
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for status_id, label in STATUS_LABELS.items():
         text = f"● {label}" if status_id == current_status_id else label
         builder.button(text=text, callback_data=AddBookCallback(book_id=book_id, status_id=status_id))
     builder.adjust(3, 3)
     if current_status_id:
-        builder.row(InlineKeyboardButton(text="🗑 Удалить из статуса", callback_data=DeleteBookCallback(book_id=book_id).pack()))
+        builder.row(
+            InlineKeyboardButton(text="🗑 Удалить из статуса", callback_data=DeleteBookCallback(book_id=book_id).pack())
+        )
     builder.row(InlineKeyboardButton(text="📋 В список", callback_data=ShowListsCallback(book_id=book_id).pack()))
     if book_url:
         builder.row(InlineKeyboardButton(text="🔗 Открыть на Hardcover", url=book_url))
@@ -150,10 +170,12 @@ def _build_lists_keyboard(book_id: int, lists: list[dict]) -> InlineKeyboardMark
     for lst in lists:
         list_book_id = lst.get("list_book_id", 0)
         mark = " ✓" if list_book_id else ""
-        builder.row(InlineKeyboardButton(
-            text=f"🔖 {lst['name']} ({lst['books_count']}){mark}",
-            callback_data=AddToListCallback(book_id=book_id, list_id=lst["id"], list_book_id=list_book_id).pack(),
-        ))
+        builder.row(
+            InlineKeyboardButton(
+                text=f"🔖 {lst['name']} ({lst['books_count']}){mark}",
+                callback_data=AddToListCallback(book_id=book_id, list_id=lst["id"], list_book_id=list_book_id).pack(),
+            )
+        )
     builder.row(InlineKeyboardButton(text="← Назад", callback_data=BackToBookCallback(book_id=book_id).pack()))
     return builder.as_markup()
 
@@ -431,9 +453,7 @@ async def inline_search(inline_query: InlineQuery):
                 id=str(book["id"]),
                 title=title,
                 description=author or "Hardcover",
-                input_message_content=InputTextMessageContent(
-                    message_text=text, parse_mode="HTML"
-                ),
+                input_message_content=InputTextMessageContent(message_text=text, parse_mode="HTML"),
             )
         )
 

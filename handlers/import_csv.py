@@ -3,11 +3,11 @@ import csv
 import io
 import re
 
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, Document
+from aiogram.types import Document, Message
 
 from api import HardcoverAPI
 from db import get_token
@@ -26,7 +26,7 @@ class ImportStates(StatesGroup):
 
 
 def _clean_isbn(raw: str) -> str:
-    return re.sub(r'[^0-9X]', '', raw.upper())
+    return re.sub(r"[^0-9X]", "", raw.upper())
 
 
 def _parse_rating(raw: str) -> float | None:
@@ -42,14 +42,16 @@ def _parse_csv(content: bytes) -> list[dict]:
     reader = csv.DictReader(io.StringIO(text))
     rows = []
     for row in reader:
-        rows.append({
-            "title": row.get("Title", "").strip(),
-            "author": row.get("Author", "").strip(),
-            "isbn": _clean_isbn(row.get("ISBN", "")),
-            "isbn13": _clean_isbn(row.get("ISBN13", "")),
-            "rating": _parse_rating(row.get("My Rating", "0")),
-            "shelf": row.get("Exclusive Shelf", "read").strip(),
-        })
+        rows.append(
+            {
+                "title": row.get("Title", "").strip(),
+                "author": row.get("Author", "").strip(),
+                "isbn": _clean_isbn(row.get("ISBN", "")),
+                "isbn13": _clean_isbn(row.get("ISBN13", "")),
+                "rating": _parse_rating(row.get("My Rating", "0")),
+                "shelf": row.get("Exclusive Shelf", "read").strip(),
+            }
+        )
     return rows
 
 
@@ -107,8 +109,7 @@ async def process_import_file(message: Message, state: FSMContext):
         if i % 10 == 0:
             try:
                 await status_msg.edit_text(
-                    f"⏳ Обрабатываю {i}/{total}...\n"
-                    f"✅ {ok} добавлено | ⏭ {skipped} пропущено | ❌ {failed} ошибок"
+                    f"⏳ Обрабатываю {i}/{total}...\n" f"✅ {ok} добавлено | ⏭ {skipped} пропущено | ❌ {failed} ошибок"
                 )
             except Exception:
                 pass
@@ -148,12 +149,7 @@ async def process_import_file(message: Message, state: FSMContext):
 
         await asyncio.sleep(1.1)
 
-    summary = (
-        f"✅ Импорт завершён!\n\n"
-        f"Добавлено: {ok}\n"
-        f"Пропущено: {skipped}\n"
-        f"Не найдено: {failed}"
-    )
+    summary = f"✅ Импорт завершён!\n\n" f"Добавлено: {ok}\n" f"Пропущено: {skipped}\n" f"Не найдено: {failed}"
     if failed_titles:
         preview = failed_titles[:10]
         summary += "\n\nНе найдены:\n" + "\n".join(f"• {t}" for t in preview)
