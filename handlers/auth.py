@@ -29,7 +29,7 @@ async def cmd_start(message: Message):
         "2. Перейдите в Settings → Account → API Token\n"
         "3. Скопируйте токен и отправьте /token\n\n"
         "После авторизации доступны команды:\n"
-        "/shelves — ваши полки\n"
+        "/shelves — ваши статусы\n"
         "/search — поиск книг\n"
         "/import — импорт из Goodreads CSV",
         parse_mode="HTML",
@@ -74,7 +74,7 @@ async def process_token(message: Message, state: FSMContext):
         await message.answer(
             f"✅ Авторизован как @{username}\n\n"
             "Теперь доступны:\n"
-            "/shelves — ваши полки\n"
+            "/shelves — ваши статусы\n"
             "/search — поиск книг\n"
             "/import — импорт из Goodreads CSV"
         )

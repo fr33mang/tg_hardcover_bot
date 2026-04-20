@@ -101,19 +101,41 @@ class HardcoverAPI:
         gql = """
         query {
             me {
-                want_count: user_books_aggregate(where: {status_id: {_eq: 1}}) { aggregate { count } }
-                reading_count: user_books_aggregate(where: {status_id: {_eq: 2}}) { aggregate { count } }
-                read_count: user_books_aggregate(where: {status_id: {_eq: 3}}) { aggregate { count } }
+                s1: user_books_aggregate(where: {status_id: {_eq: 1}}) { aggregate { count } }
+                s2: user_books_aggregate(where: {status_id: {_eq: 2}}) { aggregate { count } }
+                s3: user_books_aggregate(where: {status_id: {_eq: 3}}) { aggregate { count } }
+                s4: user_books_aggregate(where: {status_id: {_eq: 4}}) { aggregate { count } }
+                s5: user_books_aggregate(where: {status_id: {_eq: 5}}) { aggregate { count } }
+                s6: user_books_aggregate(where: {status_id: {_eq: 6}}) { aggregate { count } }
+                lists { id name books_count }
             }
         }
         """
         data = await self.execute_query(gql)
         me = data.get("me", [{}])[0]
-        return {
-            "want_to_read": me.get("want_count", {}).get("aggregate", {}).get("count", 0),
-            "reading": me.get("reading_count", {}).get("aggregate", {}).get("count", 0),
-            "read": me.get("read_count", {}).get("aggregate", {}).get("count", 0),
+        counts = {i: me.get(f"s{i}", {}).get("aggregate", {}).get("count", 0) for i in range(1, 7)}
+        return {"counts": counts, "lists": me.get("lists", [])}
+
+    async def get_list_books(self, list_id: int, limit: int = 10, offset: int = 0) -> list[dict]:
+        gql = """
+        query GetListBooks($list_id: Int!, $limit: Int!, $offset: Int!) {
+            lists(where: {id: {_eq: $list_id}}) {
+                name
+                list_books(limit: $limit, offset: $offset) {
+                    id
+                    book { id title slug release_year
+                        contributions { author { id name } contribution }
+                    }
+                }
+            }
         }
+        """
+        data = await self.execute_query(gql, {"list_id": list_id, "limit": limit, "offset": offset})
+        lists = data.get("lists", [])
+        if not lists:
+            return []
+        result = lists[0]
+        return {"name": result["name"], "books": result.get("list_books", [])}
 
     async def get_shelf_books(self, status_id: int, limit: int = 10, offset: int = 0) -> list[dict]:
         gql = """
@@ -229,6 +251,44 @@ class HardcoverAPI:
             "rating": b.get("rating"),
             "ratings_count": b.get("ratings_count"),
         }
+
+    async def get_user_lists(self, book_id: int | None = None) -> list[dict]:
+        gql = """
+        query GetLists($book_id: Int!) {
+            me {
+                lists {
+                    id name books_count slug
+                    list_books(where: {book_id: {_eq: $book_id}}) { id }
+                }
+            }
+        }
+        """
+        data = await self.execute_query(gql, {"book_id": book_id or 0})
+        me = data.get("me", [{}])
+        lists = me[0].get("lists", []) if me else []
+        for lst in lists:
+            lb = lst.get("list_books", [])
+            lst["has_book"] = bool(lb)
+            lst["list_book_id"] = lb[0]["id"] if lb else 0
+        return lists
+
+    async def add_book_to_list(self, list_id: int, book_id: int) -> dict:
+        gql = """
+        mutation AddToList($list_id: Int!, $book_id: Int!) {
+            insert_list_book(object: {list_id: $list_id, book_id: $book_id}) { id }
+        }
+        """
+        data = await self.execute_query(gql, {"list_id": list_id, "book_id": book_id})
+        return data.get("insert_list_book", {})
+
+    async def remove_book_from_list(self, list_book_id: int) -> dict:
+        gql = """
+        mutation RemoveFromList($id: Int!) {
+            delete_list_book(id: $id) { id }
+        }
+        """
+        data = await self.execute_query(gql, {"id": list_book_id})
+        return data.get("delete_list_book", {})
 
     async def add_or_update_book(self, book_id: int, status_id: int, rating: float | None = None) -> dict:
         existing = await self.get_user_book(book_id)

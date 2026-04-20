@@ -12,12 +12,22 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
 
 from api import HardcoverAPI
-from callbacks import BookDetailCallback, AddBookCallback, DeleteBookCallback
+from callbacks import (
+    BookDetailCallback, AddBookCallback, DeleteBookCallback,
+    ShowListsCallback, AddToListCallback, BackToBookCallback, CloseMessageCallback,
+)
 from db import get_token
 
 router = Router()
 
-STATUS_LABELS = {1: "📚 Хочу", 2: "📖 Читаю", 3: "✅ Прочитал"}
+STATUS_LABELS = {
+    1: "📚 Хочу",
+    2: "📖 Читаю",
+    3: "✅ Прочитал",
+    4: "⏸ Пауза",
+    5: "❌ Не закончил",
+    6: "🙈 Игнор",
+}
 SEARCH_PAGE_SIZE = 5
 
 
@@ -125,11 +135,26 @@ def _build_book_buttons(book_id: int, current_status_id: int | None = None, book
     for status_id, label in STATUS_LABELS.items():
         text = f"● {label}" if status_id == current_status_id else label
         builder.button(text=text, callback_data=AddBookCallback(book_id=book_id, status_id=status_id))
-    builder.adjust(3)
+    builder.adjust(3, 3)
     if current_status_id:
-        builder.row(InlineKeyboardButton(text="🗑 Удалить с полки", callback_data=DeleteBookCallback(book_id=book_id).pack()))
+        builder.row(InlineKeyboardButton(text="🗑 Удалить из статуса", callback_data=DeleteBookCallback(book_id=book_id).pack()))
+    builder.row(InlineKeyboardButton(text="📋 В список", callback_data=ShowListsCallback(book_id=book_id).pack()))
     if book_url:
         builder.row(InlineKeyboardButton(text="🔗 Открыть на Hardcover", url=book_url))
+    builder.row(InlineKeyboardButton(text="✕ Закрыть", callback_data=CloseMessageCallback().pack()))
+    return builder.as_markup()
+
+
+def _build_lists_keyboard(book_id: int, lists: list[dict]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for lst in lists:
+        list_book_id = lst.get("list_book_id", 0)
+        mark = " ✓" if list_book_id else ""
+        builder.row(InlineKeyboardButton(
+            text=f"🔖 {lst['name']} ({lst['books_count']}){mark}",
+            callback_data=AddToListCallback(book_id=book_id, list_id=lst["id"], list_book_id=list_book_id).pack(),
+        ))
+    builder.row(InlineKeyboardButton(text="← Назад", callback_data=BackToBookCallback(book_id=book_id).pack()))
     return builder.as_markup()
 
 
@@ -278,9 +303,88 @@ async def delete_book_callback(callback: CallbackQuery, callback_data: DeleteBoo
             await callback.message.edit_reply_markup(reply_markup=new_kb)
         except Exception as e:
             logging.warning("edit_reply_markup failed: %s", e)
-        await callback.answer("Книга удалена с полки.")
+        await callback.answer("Книга удалена.")
     except Exception as e:
         await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@router.callback_query(ShowListsCallback.filter())
+async def show_lists_callback(callback: CallbackQuery, callback_data: ShowListsCallback):
+    token = await get_token(callback.from_user.id)
+    if not token:
+        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        return
+
+    api = HardcoverAPI(token)
+    try:
+        lists = await api.get_user_lists(book_id=callback_data.book_id)
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        return
+
+    if not lists:
+        await callback.answer("У вас нет списков на Hardcover.", show_alert=True)
+        return
+
+    kb = _build_lists_keyboard(callback_data.book_id, lists)
+    await callback.message.edit_reply_markup(reply_markup=kb)
+    await callback.answer()
+
+
+@router.callback_query(AddToListCallback.filter())
+async def add_to_list_callback(callback: CallbackQuery, callback_data: AddToListCallback):
+    token = await get_token(callback.from_user.id)
+    if not token:
+        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        return
+
+    api = HardcoverAPI(token)
+    try:
+        if callback_data.list_book_id:
+            await api.remove_book_from_list(callback_data.list_book_id)
+            toast = "Удалено из списка."
+        else:
+            await api.add_book_to_list(callback_data.list_id, callback_data.book_id)
+            toast = "Добавлено в список!"
+        lists = await api.get_user_lists(book_id=callback_data.book_id)
+        kb = _build_lists_keyboard(callback_data.book_id, lists)
+        await callback.message.edit_reply_markup(reply_markup=kb)
+        await callback.answer(toast)
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@router.callback_query(BackToBookCallback.filter())
+async def back_to_book_callback(callback: CallbackQuery, callback_data: BackToBookCallback):
+    token = await get_token(callback.from_user.id)
+    if not token:
+        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        return
+
+    api = HardcoverAPI(token)
+    try:
+        user_book, book = await asyncio.gather(
+            api.get_user_book(callback_data.book_id),
+            api.get_book(callback_data.book_id),
+        )
+        current_status_id = user_book["status_id"] if user_book else None
+        url = _book_url(book) if book else None
+        kb = _build_book_buttons(callback_data.book_id, current_status_id, book_url=url)
+        await callback.message.edit_reply_markup(reply_markup=kb)
+        await callback.answer()
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@router.callback_query(CloseMessageCallback.filter())
+async def close_message_callback(callback: CallbackQuery):
+    try:
+        await callback.message.delete()
+    except Exception as e:
+        logging.warning("delete message failed: %s", e)
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        return
+    await callback.answer()
 
 
 @router.inline_query()
