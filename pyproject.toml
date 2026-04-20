@@ -1,7 +1,7 @@
 [project]
 name = "handcover-bot"
 version = "0.1.0"
-description = "Add your description here"
+description = "Unofficial Hardcover App Telegram Bot"
 requires-python = ">=3.12"
 dependencies = [
     "aiogram==3.13.1",
