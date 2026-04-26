@@ -8,16 +8,14 @@ _lang_cache: dict[int, str] = {}
 
 async def init_db():
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute(
-            """
+        await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 telegram_id INTEGER PRIMARY KEY,
                 bearer_token TEXT NOT NULL DEFAULT '',
                 hardcover_username TEXT,
                 created_at TEXT DEFAULT (datetime('now'))
             )
-        """
-        )
+        """)
         await db.commit()
         try:
             await db.execute(f"ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT '{DEFAULT_LANG}'")
