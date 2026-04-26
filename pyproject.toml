@@ -20,3 +20,4 @@ profile = "black"
 
 [tool.black]
 line-length = 120
+target-version = ['py312']

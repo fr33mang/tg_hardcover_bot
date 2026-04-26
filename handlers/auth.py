@@ -6,6 +6,7 @@ from aiogram.types import Message
 
 from api import HardcoverAPI
 from db import delete_token, get_token, save_token
+from i18n import get_text
 
 router = Router()
 
@@ -15,38 +16,22 @@ class AuthStates(StatesGroup):
 
 
 @router.message(Command("start"))
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, lang: str):
     has_token = await get_token(message.from_user.id)
     if has_token:
-        await message.answer("Вы уже авторизованы. Используйте /shelves, /search или /import.")
+        await message.answer(get_text("already_authorized", lang))
         return
-    await message.answer(
-        "👋 Привет! Это бот для Hardcover.\n\n"
-        "Чтобы начать:\n"
-        "1. Войдите на <a href='https://hardcover.app'>hardcover.app</a>\n"
-        "2. Перейдите в Settings → Account → API Token\n"
-        "3. Скопируйте токен и отправьте /token\n\n"
-        "После авторизации доступны команды:\n"
-        "/shelves — ваши статусы\n"
-        "/search — поиск книг\n"
-        "/import — импорт из Goodreads CSV",
-        parse_mode="HTML",
-    )
+    await message.answer(get_text("start_welcome", lang), parse_mode="HTML")
 
 
 @router.message(Command("token"))
-async def cmd_token(message: Message, state: FSMContext):
+async def cmd_token(message: Message, state: FSMContext, lang: str):
     await state.set_state(AuthStates.waiting_for_token)
-    await message.answer(
-        "Отправьте ваш Bearer токен с Hardcover.\n"
-        "Найти его можно в Settings → Account → API Token на hardcover.app\n\n"
-        "<i>Сообщение с токеном будет удалено для безопасности.</i>",
-        parse_mode="HTML",
-    )
+    await message.answer(get_text("token_prompt", lang), parse_mode="HTML")
 
 
 @router.message(AuthStates.waiting_for_token)
-async def process_token(message: Message, state: FSMContext):
+async def process_token(message: Message, state: FSMContext, lang: str):
     await state.clear()
     token = message.text.strip()
     if token.lower().startswith("bearer "):
@@ -58,29 +43,23 @@ async def process_token(message: Message, state: FSMContext):
         pass
 
     if not token:
-        await message.answer("Токен не может быть пустым. Попробуйте /token ещё раз.")
+        await message.answer(get_text("token_empty", lang))
         return
 
     try:
         api = HardcoverAPI(token)
         user = await api.get_me()
         if not user:
-            await message.answer("Токен недействителен. Проверьте и попробуйте /token снова.")
+            await message.answer(get_text("token_invalid", lang))
             return
         username = user.get("username", "")
         await save_token(message.from_user.id, token, username)
-        await message.answer(
-            f"✅ Авторизован как @{username}\n\n"
-            "Теперь доступны:\n"
-            "/shelves — ваши статусы\n"
-            "/search — поиск книг\n"
-            "/import — импорт из Goodreads CSV"
-        )
+        await message.answer(get_text("auth_success", lang, username=username))
     except Exception as e:
-        await message.answer(f"Ошибка авторизации: {e}\nПопробуйте /token снова.")
+        await message.answer(get_text("auth_error", lang, e=e))
 
 
 @router.message(Command("logout"))
-async def cmd_logout(message: Message):
+async def cmd_logout(message: Message, lang: str):
     await delete_token(message.from_user.id)
-    await message.answer("Вы вышли из аккаунта. Используйте /token для повторной авторизации.")
+    await message.answer(get_text("logged_out", lang))

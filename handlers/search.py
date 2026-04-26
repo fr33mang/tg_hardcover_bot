@@ -27,17 +27,10 @@ from callbacks import (
     ShowListsCallback,
 )
 from db import get_token
+from i18n import get_text
 
 router = Router()
 
-STATUS_LABELS = {
-    1: "📚 Хочу",
-    2: "📖 Читаю",
-    3: "✅ Прочитал",
-    4: "⏸ Пауза",
-    5: "❌ Не закончил",
-    6: "🙈 Игнор",
-}
 SEARCH_PAGE_SIZE = 5
 
 
@@ -62,7 +55,7 @@ def _book_url(book: dict) -> str | None:
     return f"https://hardcover.app/books/{slug}" if slug else None
 
 
-def _format_book_line(book: dict) -> str:
+def _format_book_line(book: dict, lang: str) -> str:
     title = book.get("title", "?")
     authors = _dedup_authors(book.get("authors") or [])
     year = book.get("release_year") or ""
@@ -72,7 +65,7 @@ def _format_book_line(book: dict) -> str:
     safe_title = html.escape(title)
     link = f' <a href="{url}">🔗</a>' if url else ""
     if len(authors) > 2:
-        author = html.escape(", ".join(authors[:2])) + " и др."
+        author = html.escape(", ".join(authors[:2])) + f" {get_text('et_al', lang)}"
     elif author:
         author = html.escape(author)
     parts = [f"<b>{safe_title}</b>"]
@@ -84,11 +77,11 @@ def _format_book_line(book: dict) -> str:
     return line + link
 
 
-def _build_results_message(books: list[dict], query: str, page: int = 1) -> tuple[str, InlineKeyboardMarkup]:
+def _build_results_message(books: list[dict], query: str, lang: str, page: int = 1) -> tuple[str, InlineKeyboardMarkup]:
     lines = [f'🔍 <b>"{html.escape(query)}"</b>\n']
     for i, book in enumerate(books, 1):
-        lines.append(f"{i}. {_format_book_line(book)}")
-    lines.append("\n<i>Нажмите на номер книги для подробностей</i>")
+        lines.append(f"{i}. {_format_book_line(book, lang)}")
+    lines.append(f"\n<i>{get_text('search_hint', lang)}</i>")
 
     builder = InlineKeyboardBuilder()
     builder.row(
@@ -101,11 +94,15 @@ def _build_results_message(books: list[dict], query: str, page: int = 1) -> tupl
     nav = []
     if page > 1:
         nav.append(
-            InlineKeyboardButton(text="← Назад", callback_data=SearchPageCallback(query=query, page=page - 1).pack())
+            InlineKeyboardButton(
+                text=get_text("btn_prev", lang), callback_data=SearchPageCallback(query=query, page=page - 1).pack()
+            )
         )
     if len(books) == SEARCH_PAGE_SIZE:
         nav.append(
-            InlineKeyboardButton(text="Ещё →", callback_data=SearchPageCallback(query=query, page=page + 1).pack())
+            InlineKeyboardButton(
+                text=get_text("btn_next", lang), callback_data=SearchPageCallback(query=query, page=page + 1).pack()
+            )
         )
     if nav:
         builder.row(*nav)
@@ -113,7 +110,7 @@ def _build_results_message(books: list[dict], query: str, page: int = 1) -> tupl
     return "\n".join(lines), builder.as_markup()
 
 
-def _build_book_detail_text(book: dict) -> str:
+def _build_book_detail_text(book: dict, lang: str) -> str:
     title = book.get("title", "?")
     authors = _dedup_authors(book.get("authors") or [])
     year = book.get("release_year")
@@ -134,7 +131,7 @@ def _build_book_detail_text(book: dict) -> str:
     if rating:
         stars = f"<b>{rating:.1f}</b> ⭐"
         if ratings_count:
-            stars += f" ({ratings_count} оценок)"
+            stars += f" ({get_text('ratings_count', lang, count=ratings_count)})"
         lines.append(stars)
     if description:
         desc = html.escape(description.strip())
@@ -146,25 +143,32 @@ def _build_book_detail_text(book: dict) -> str:
 
 
 def _build_book_buttons(
-    book_id: int, current_status_id: int | None = None, book_url: str | None = None
+    book_id: int, lang: str, current_status_id: int | None = None, book_url: str | None = None
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for status_id, label in STATUS_LABELS.items():
+    for status_id in range(1, 7):
+        label = get_text(f"status_{status_id}_short", lang)
         text = f"● {label}" if status_id == current_status_id else label
         builder.button(text=text, callback_data=AddBookCallback(book_id=book_id, status_id=status_id))
     builder.adjust(3, 3)
     if current_status_id:
         builder.row(
-            InlineKeyboardButton(text="🗑 Удалить из статуса", callback_data=DeleteBookCallback(book_id=book_id).pack())
+            InlineKeyboardButton(
+                text=get_text("btn_delete_status", lang), callback_data=DeleteBookCallback(book_id=book_id).pack()
+            )
         )
-    builder.row(InlineKeyboardButton(text="📋 В список", callback_data=ShowListsCallback(book_id=book_id).pack()))
+    builder.row(
+        InlineKeyboardButton(
+            text=get_text("btn_add_to_list", lang), callback_data=ShowListsCallback(book_id=book_id).pack()
+        )
+    )
     if book_url:
-        builder.row(InlineKeyboardButton(text="🔗 Открыть на Hardcover", url=book_url))
-    builder.row(InlineKeyboardButton(text="✕ Закрыть", callback_data=CloseMessageCallback().pack()))
+        builder.row(InlineKeyboardButton(text=get_text("btn_open_hardcover", lang), url=book_url))
+    builder.row(InlineKeyboardButton(text=get_text("btn_close", lang), callback_data=CloseMessageCallback().pack()))
     return builder.as_markup()
 
 
-def _build_lists_keyboard(book_id: int, lists: list[dict]) -> InlineKeyboardMarkup:
+def _build_lists_keyboard(book_id: int, lists: list[dict], lang: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for lst in lists:
         list_book_id = lst.get("list_book_id", 0)
@@ -175,76 +179,78 @@ def _build_lists_keyboard(book_id: int, lists: list[dict]) -> InlineKeyboardMark
                 callback_data=AddToListCallback(book_id=book_id, list_id=lst["id"], list_book_id=list_book_id).pack(),
             )
         )
-    builder.row(InlineKeyboardButton(text="← Назад", callback_data=BackToBookCallback(book_id=book_id).pack()))
+    builder.row(
+        InlineKeyboardButton(text=get_text("btn_prev", lang), callback_data=BackToBookCallback(book_id=book_id).pack())
+    )
     return builder.as_markup()
 
 
 @router.message(Command("search"))
-async def cmd_search(message: Message):
+async def cmd_search(message: Message, lang: str):
     query = message.text.removeprefix("/search").strip()
     if not query:
-        await message.answer("Использование: /search <название книги>")
+        await message.answer(get_text("search_usage", lang))
         return
-    await _do_search(message, query)
+    await _do_search(message, query, lang)
 
 
 @router.message(F.text & ~F.text.startswith("/"))
-async def text_search(message: Message):
+async def text_search(message: Message, lang: str):
     token = await get_token(message.from_user.id)
     if not token:
         return
-    await _do_search(message, message.text.strip())
+    await _do_search(message, message.text.strip(), lang)
 
 
-async def _do_search(message: Message, query: str):
+async def _do_search(message: Message, query: str, lang: str):
     token = await get_token(message.from_user.id)
     if not token:
-        await message.answer("Сначала авторизуйтесь: /token")
+        await message.answer(get_text("auth_required", lang))
         return
 
     api = HardcoverAPI(token)
     try:
         books = await api.search_books(query, limit=SEARCH_PAGE_SIZE, page=1)
     except Exception as e:
-        await message.answer(f"Ошибка поиска: {e}")
+        await message.answer(get_text("search_error", lang, e=e))
         return
 
     if not books:
-        await message.answer("Книги не найдены.")
+        await message.answer(get_text("no_books_found", lang))
         return
 
-    text, kb = _build_results_message(books, query, page=1)
+    text, kb = _build_results_message(books, query, lang, page=1)
     await message.answer(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
 
 
 @router.callback_query(SearchPageCallback.filter())
-async def search_page_callback(callback: CallbackQuery, callback_data: SearchPageCallback):
+async def search_page_callback(callback: CallbackQuery, callback_data: SearchPageCallback, lang: str):
     token = await get_token(callback.from_user.id)
     if not token:
-        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        await callback.answer(get_text("auth_required", lang), show_alert=True)
         return
 
     api = HardcoverAPI(token)
     try:
         books = await api.search_books(callback_data.query, limit=SEARCH_PAGE_SIZE, page=callback_data.page)
     except Exception as e:
-        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
         return
 
     if not books:
-        await callback.answer("Больше результатов нет.", show_alert=True)
+        await callback.answer(get_text("no_more_results", lang), show_alert=True)
         return
 
-    text, kb = _build_results_message(books, callback_data.query, page=callback_data.page)
+    text, kb = _build_results_message(books, callback_data.query, lang, page=callback_data.page)
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
     await callback.answer()
 
 
 @router.callback_query(BookDetailCallback.filter())
-async def book_detail_callback(callback: CallbackQuery, callback_data: BookDetailCallback):
+async def book_detail_callback(callback: CallbackQuery, callback_data: BookDetailCallback, lang: str):
     token = await get_token(callback.from_user.id)
     if not token:
-        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        await callback.answer(get_text("auth_required", lang), show_alert=True)
         return
 
     await callback.answer()
@@ -256,17 +262,17 @@ async def book_detail_callback(callback: CallbackQuery, callback_data: BookDetai
             api.get_user_book(callback_data.book_id),
         )
     except Exception as e:
-        await callback.message.answer(f"Ошибка загрузки книги: {e}")
+        await callback.message.answer(get_text("load_error", lang, e=e))
         return
 
     if not book:
-        await callback.message.answer("Книга не найдена.")
+        await callback.message.answer(get_text("book_not_found", lang))
         return
 
     current_status_id = user_book["status_id"] if user_book else None
     url = _book_url(book)
-    text = _build_book_detail_text(book)
-    kb = _build_book_buttons(book["id"], current_status_id, book_url=url)
+    text = _build_book_detail_text(book, lang)
+    kb = _build_book_buttons(book["id"], lang, current_status_id, book_url=url)
     image_url = book.get("image_url")
 
     if image_url:
@@ -281,10 +287,10 @@ async def book_detail_callback(callback: CallbackQuery, callback_data: BookDetai
 
 
 @router.callback_query(AddBookCallback.filter())
-async def add_book_callback(callback: CallbackQuery, callback_data: AddBookCallback):
+async def add_book_callback(callback: CallbackQuery, callback_data: AddBookCallback, lang: str):
     token = await get_token(callback.from_user.id)
     if not token:
-        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        await callback.answer(get_text("auth_required", lang), show_alert=True)
         return
 
     api = HardcoverAPI(token)
@@ -292,22 +298,22 @@ async def add_book_callback(callback: CallbackQuery, callback_data: AddBookCallb
         await api.add_or_update_book(callback_data.book_id, callback_data.status_id)
         book = await api.get_book(callback_data.book_id)
         url = _book_url(book) if book else None
-        new_kb = _build_book_buttons(callback_data.book_id, callback_data.status_id, book_url=url)
+        new_kb = _build_book_buttons(callback_data.book_id, lang, callback_data.status_id, book_url=url)
         try:
             await callback.message.edit_reply_markup(reply_markup=new_kb)
         except Exception as e:
             logging.warning("edit_reply_markup failed: %s", e)
-        label = STATUS_LABELS[callback_data.status_id]
-        await callback.answer(f"{label} — добавлено!")
+        label = get_text(f"status_{callback_data.status_id}_short", lang)
+        await callback.answer(get_text("status_added", lang, label=label))
     except Exception as e:
-        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
 
 
 @router.callback_query(DeleteBookCallback.filter())
-async def delete_book_callback(callback: CallbackQuery, callback_data: DeleteBookCallback):
+async def delete_book_callback(callback: CallbackQuery, callback_data: DeleteBookCallback, lang: str):
     token = await get_token(callback.from_user.id)
     if not token:
-        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        await callback.answer(get_text("auth_required", lang), show_alert=True)
         return
 
     api = HardcoverAPI(token)
@@ -319,67 +325,67 @@ async def delete_book_callback(callback: CallbackQuery, callback_data: DeleteBoo
         if user_book:
             await api.delete_user_book(user_book["id"])
         url = _book_url(book) if book else None
-        new_kb = _build_book_buttons(callback_data.book_id, None, book_url=url)
+        new_kb = _build_book_buttons(callback_data.book_id, lang, None, book_url=url)
         try:
             await callback.message.edit_reply_markup(reply_markup=new_kb)
         except Exception as e:
             logging.warning("edit_reply_markup failed: %s", e)
-        await callback.answer("Книга удалена.")
+        await callback.answer(get_text("book_deleted", lang))
     except Exception as e:
-        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
 
 
 @router.callback_query(ShowListsCallback.filter())
-async def show_lists_callback(callback: CallbackQuery, callback_data: ShowListsCallback):
+async def show_lists_callback(callback: CallbackQuery, callback_data: ShowListsCallback, lang: str):
     token = await get_token(callback.from_user.id)
     if not token:
-        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        await callback.answer(get_text("auth_required", lang), show_alert=True)
         return
 
     api = HardcoverAPI(token)
     try:
         lists = await api.get_user_lists(book_id=callback_data.book_id)
     except Exception as e:
-        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
         return
 
     if not lists:
-        await callback.answer("У вас нет списков на Hardcover.", show_alert=True)
+        await callback.answer(get_text("no_lists", lang), show_alert=True)
         return
 
-    kb = _build_lists_keyboard(callback_data.book_id, lists)
+    kb = _build_lists_keyboard(callback_data.book_id, lists, lang)
     await callback.message.edit_reply_markup(reply_markup=kb)
     await callback.answer()
 
 
 @router.callback_query(AddToListCallback.filter())
-async def add_to_list_callback(callback: CallbackQuery, callback_data: AddToListCallback):
+async def add_to_list_callback(callback: CallbackQuery, callback_data: AddToListCallback, lang: str):
     token = await get_token(callback.from_user.id)
     if not token:
-        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        await callback.answer(get_text("auth_required", lang), show_alert=True)
         return
 
     api = HardcoverAPI(token)
     try:
         if callback_data.list_book_id:
             await api.remove_book_from_list(callback_data.list_book_id)
-            toast = "Удалено из списка."
+            toast = get_text("removed_from_list", lang)
         else:
             await api.add_book_to_list(callback_data.list_id, callback_data.book_id)
-            toast = "Добавлено в список!"
+            toast = get_text("added_to_list", lang)
         lists = await api.get_user_lists(book_id=callback_data.book_id)
-        kb = _build_lists_keyboard(callback_data.book_id, lists)
+        kb = _build_lists_keyboard(callback_data.book_id, lists, lang)
         await callback.message.edit_reply_markup(reply_markup=kb)
         await callback.answer(toast)
     except Exception as e:
-        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
 
 
 @router.callback_query(BackToBookCallback.filter())
-async def back_to_book_callback(callback: CallbackQuery, callback_data: BackToBookCallback):
+async def back_to_book_callback(callback: CallbackQuery, callback_data: BackToBookCallback, lang: str):
     token = await get_token(callback.from_user.id)
     if not token:
-        await callback.answer("Сначала авторизуйтесь: /token", show_alert=True)
+        await callback.answer(get_text("auth_required", lang), show_alert=True)
         return
 
     api = HardcoverAPI(token)
@@ -390,26 +396,26 @@ async def back_to_book_callback(callback: CallbackQuery, callback_data: BackToBo
         )
         current_status_id = user_book["status_id"] if user_book else None
         url = _book_url(book) if book else None
-        kb = _build_book_buttons(callback_data.book_id, current_status_id, book_url=url)
+        kb = _build_book_buttons(callback_data.book_id, lang, current_status_id, book_url=url)
         await callback.message.edit_reply_markup(reply_markup=kb)
         await callback.answer()
     except Exception as e:
-        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
 
 
 @router.callback_query(CloseMessageCallback.filter())
-async def close_message_callback(callback: CallbackQuery):
+async def close_message_callback(callback: CallbackQuery, lang: str):
     try:
         await callback.message.delete()
     except Exception as e:
         logging.warning("delete message failed: %s", e)
-        await callback.answer(f"Ошибка: {e}", show_alert=True)
+        await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
         return
     await callback.answer()
 
 
 @router.inline_query()
-async def inline_search(inline_query: InlineQuery):
+async def inline_search(inline_query: InlineQuery, lang: str):
     query = inline_query.query.strip()
     if not query:
         await inline_query.answer([], cache_time=1)
@@ -420,7 +426,7 @@ async def inline_search(inline_query: InlineQuery):
         await inline_query.answer(
             [],
             cache_time=1,
-            switch_pm_text="Авторизуйтесь в боте",
+            switch_pm_text=get_text("inline_auth_prompt", lang),
             switch_pm_parameter="start",
         )
         return
