@@ -14,6 +14,7 @@ The bot is available at [@hardcoverapp_bot](https://t.me/hardcoverapp_bot).
 - **Lists** — browse and manage your Hardcover lists
 - **Goodreads import** — import your library from a Goodreads CSV export
 - **Inline mode** — search books from any chat via `@botname query`
+- **Encrypted storage** — Hardcover API tokens are encrypted at rest using Fernet (AES-128)
 
 ## Setup
 
@@ -28,9 +29,17 @@ The bot is available at [@hardcoverapp_bot](https://t.me/hardcoverapp_bot).
    TELEGRAM_BOT_TOKEN=your_bot_token_here
    ```
 
-3. Get your Hardcover API token at [hardcover.app/account/api](https://hardcover.app/account/api)
+3. Generate an encryption key and add it to `.env`:
+   ```bash
+   uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   ```
+   ```
+   ENCRYPTION_KEY=your_generated_key_here
+   ```
 
-4. Run:
+4. Get your Hardcover API token at [hardcover.app/account/api](https://hardcover.app/account/api)
+
+5. Run:
    ```bash
    uv run python bot.py
    ```
