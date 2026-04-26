@@ -4,7 +4,7 @@ SUPPORTED_LANGS: dict[str, dict[str, str]] = {
     "ru": ru.STRINGS,
     "en": en.STRINGS,
 }
-DEFAULT_LANG = "en"
+DEFAULT_LANG = "ru"
 
 
 def get_text(key: str, lang: str, **kwargs) -> str:
