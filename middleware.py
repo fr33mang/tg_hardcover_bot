@@ -4,7 +4,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 
 from db import get_language
-from i18n import DEFAULT_LANG, detect_lang
+from i18n import DEFAULT_LANG
 
 
 class LanguageMiddleware(BaseMiddleware):
@@ -15,13 +15,6 @@ class LanguageMiddleware(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         user = data.get("event_from_user")
-        if user:
-            lang = await get_language(user.id)
-            if lang == DEFAULT_LANG:
-                detected = detect_lang(user.language_code)
-                if detected != DEFAULT_LANG:
-                    lang = detected
-        else:
-            lang = DEFAULT_LANG
+        lang = await get_language(user.id) if user else DEFAULT_LANG
         data["lang"] = lang
         return await handler(event, data)
