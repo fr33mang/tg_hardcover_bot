@@ -55,6 +55,16 @@ def _parse_csv(content: bytes) -> list[dict]:
     return rows
 
 
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    current = await state.get_state()
+    await state.clear()
+    if current:
+        await message.answer("Отменено.")
+    else:
+        await message.answer("Нет активной операции для отмены.")
+
+
 @router.message(Command("import"))
 async def cmd_import(message: Message, state: FSMContext):
     token = await get_token(message.from_user.id)
@@ -64,19 +74,21 @@ async def cmd_import(message: Message, state: FSMContext):
     await state.set_state(ImportStates.waiting_for_file)
     await message.answer(
         "Отправьте файл <b>goodreads_library_export.csv</b>\n\n"
-        "Экспортировать можно на goodreads.com: My Books → Import/Export → Export Library",
+        "Экспортировать можно на goodreads.com: My Books → Import/Export → Export Library\n\n"
+        "Для отмены отправьте /cancel",
         parse_mode="HTML",
     )
 
 
 @router.message(ImportStates.waiting_for_file, F.document)
 async def process_import_file(message: Message, state: FSMContext):
-    await state.clear()
     doc: Document = message.document
 
     if not doc.file_name.endswith(".csv"):
-        await message.answer("Пожалуйста, отправьте файл .csv")
+        await message.answer("Пожалуйста, отправьте файл .csv или /cancel для отмены.")
         return
+
+    await state.clear()
 
     token = await get_token(message.from_user.id)
     if not token:
