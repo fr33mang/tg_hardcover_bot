@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -22,6 +24,13 @@ async def cmd_start(message: Message, lang: str):
         await message.answer(get_text("already_authorized", lang))
         return
     await message.answer(get_text("start_welcome", lang), parse_mode="HTML")
+
+
+@router.message(Command("help"))
+async def cmd_help(message: Message, lang: str):
+    has_token = await get_token(message.from_user.id)
+    key = "help_authorized" if has_token else "help_unauthorized"
+    await message.answer(get_text(key, lang), parse_mode="HTML")
 
 
 @router.message(Command("token"))
@@ -55,8 +64,9 @@ async def process_token(message: Message, state: FSMContext, lang: str):
         username = user.get("username", "")
         await save_token(message.from_user.id, token, username)
         await message.answer(get_text("auth_success", lang, username=username))
-    except Exception as e:
-        await message.answer(get_text("auth_error", lang, e=e))
+    except Exception:
+        logging.exception("Token auth failed for user %s", message.from_user.id)
+        await message.answer(get_text("auth_error", lang))
 
 
 @router.message(Command("logout"))
