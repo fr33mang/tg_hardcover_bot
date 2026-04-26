@@ -47,5 +47,5 @@ async def language_selected(callback: CallbackQuery, callback_data: LangSelectCa
         return
     await set_language(callback.from_user.id, new_lang)
     name = LANG_NAMES.get(new_lang, new_lang)
-    await callback.answer(get_text("language_set", new_lang, lang=name))
+    await callback.answer(get_text("language_set", new_lang, name=name))
     await callback.message.edit_reply_markup(reply_markup=_language_keyboard(new_lang))

@@ -77,7 +77,7 @@ STRINGS: dict[str, str] = {
     "nothing_to_cancel": "No active operation to cancel.",
     # language
     "language_choose": "Choose language:",
-    "language_set": "Language changed: {lang}",
+    "language_set": "Language changed: {name}",
     # status labels (full, with emoji)
     "status_1": "📚 Want to read",
     "status_2": "📖 Reading",
