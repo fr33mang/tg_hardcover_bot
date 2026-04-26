@@ -49,9 +49,7 @@ async def delete_token(telegram_id: int):
 
 async def get_language(telegram_id: int) -> str:
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        async with db.execute(
-            "SELECT language FROM users WHERE telegram_id = ?", (telegram_id,)
-        ) as cursor:
+        async with db.execute("SELECT language FROM users WHERE telegram_id = ?", (telegram_id,)) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else "en"
 

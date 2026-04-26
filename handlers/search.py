@@ -94,11 +94,15 @@ def _build_results_message(books: list[dict], query: str, lang: str, page: int =
     nav = []
     if page > 1:
         nav.append(
-            InlineKeyboardButton(text=get_text("btn_prev", lang), callback_data=SearchPageCallback(query=query, page=page - 1).pack())
+            InlineKeyboardButton(
+                text=get_text("btn_prev", lang), callback_data=SearchPageCallback(query=query, page=page - 1).pack()
+            )
         )
     if len(books) == SEARCH_PAGE_SIZE:
         nav.append(
-            InlineKeyboardButton(text=get_text("btn_next", lang), callback_data=SearchPageCallback(query=query, page=page + 1).pack())
+            InlineKeyboardButton(
+                text=get_text("btn_next", lang), callback_data=SearchPageCallback(query=query, page=page + 1).pack()
+            )
         )
     if nav:
         builder.row(*nav)
@@ -149,9 +153,15 @@ def _build_book_buttons(
     builder.adjust(3, 3)
     if current_status_id:
         builder.row(
-            InlineKeyboardButton(text=get_text("btn_delete_status", lang), callback_data=DeleteBookCallback(book_id=book_id).pack())
+            InlineKeyboardButton(
+                text=get_text("btn_delete_status", lang), callback_data=DeleteBookCallback(book_id=book_id).pack()
+            )
         )
-    builder.row(InlineKeyboardButton(text=get_text("btn_add_to_list", lang), callback_data=ShowListsCallback(book_id=book_id).pack()))
+    builder.row(
+        InlineKeyboardButton(
+            text=get_text("btn_add_to_list", lang), callback_data=ShowListsCallback(book_id=book_id).pack()
+        )
+    )
     if book_url:
         builder.row(InlineKeyboardButton(text=get_text("btn_open_hardcover", lang), url=book_url))
     builder.row(InlineKeyboardButton(text=get_text("btn_close", lang), callback_data=CloseMessageCallback().pack()))
@@ -169,7 +179,9 @@ def _build_lists_keyboard(book_id: int, lists: list[dict], lang: str) -> InlineK
                 callback_data=AddToListCallback(book_id=book_id, list_id=lst["id"], list_book_id=list_book_id).pack(),
             )
         )
-    builder.row(InlineKeyboardButton(text=get_text("btn_prev", lang), callback_data=BackToBookCallback(book_id=book_id).pack()))
+    builder.row(
+        InlineKeyboardButton(text=get_text("btn_prev", lang), callback_data=BackToBookCallback(book_id=book_id).pack())
+    )
     return builder.as_markup()
 
 

@@ -28,7 +28,6 @@ STRINGS: dict[str, str] = {
     ),
     "auth_error": "Authorization error: {e}\nTry /token again.",
     "logged_out": "You've been logged out. Use /token to authorize again.",
-
     # search
     "search_usage": "Usage: /search &lt;book title&gt;",
     "auth_required": "Please authorize first: /token",
@@ -53,7 +52,6 @@ STRINGS: dict[str, str] = {
     "load_error": "Error loading book: {e}",
     "ratings_count": "{count} ratings",
     "et_al": "et al.",
-
     # shelves
     "library_title": "📖 <b>Library</b>",
     "list_empty": "List is empty.",
@@ -62,7 +60,6 @@ STRINGS: dict[str, str] = {
     "btn_library": "📖 Library",
     "btn_back_nav": "← Back",
     "btn_forward_nav": "Forward →",
-
     # import
     "import_prompt": (
         "Send the file <b>goodreads_library_export.csv</b>\n\n"
@@ -78,11 +75,9 @@ STRINGS: dict[str, str] = {
     "import_more": "...and {n} more",
     "cancelled": "Cancelled.",
     "nothing_to_cancel": "No active operation to cancel.",
-
     # language
     "language_choose": "Choose language:",
     "language_set": "Language changed: {lang}",
-
     # status labels (full, with emoji)
     "status_1": "📚 Want to read",
     "status_2": "📖 Reading",
@@ -90,7 +85,6 @@ STRINGS: dict[str, str] = {
     "status_4": "⏸ On hold",
     "status_5": "❌ Did not finish",
     "status_6": "🙈 Ignored",
-
     # status labels (short, with emoji)
     "status_1_short": "📚 Want",
     "status_2_short": "📖 Reading",

@@ -7,8 +7,7 @@ from aiogram.enums import ParseMode
 
 from config import TELEGRAM_BOT_TOKEN
 from db import init_db
-from handlers import auth, import_csv, search, shelves
-from handlers import language
+from handlers import auth, import_csv, language, search, shelves
 from middleware import LanguageMiddleware
 
 logging.basicConfig(level=logging.INFO)

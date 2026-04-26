@@ -28,7 +28,6 @@ STRINGS: dict[str, str] = {
     ),
     "auth_error": "Ошибка авторизации: {e}\nПопробуйте /token снова.",
     "logged_out": "Вы вышли из аккаунта. Используйте /token для повторной авторизации.",
-
     # search
     "search_usage": "Использование: /search &lt;название книги&gt;",
     "auth_required": "Сначала авторизуйтесь: /token",
@@ -53,7 +52,6 @@ STRINGS: dict[str, str] = {
     "load_error": "Ошибка загрузки книги: {e}",
     "ratings_count": "{count} оценок",
     "et_al": "и др.",
-
     # shelves
     "library_title": "📖 <b>Библиотека</b>",
     "list_empty": "Список пуст.",
@@ -62,7 +60,6 @@ STRINGS: dict[str, str] = {
     "btn_library": "📖 Библиотека",
     "btn_back_nav": "← Назад",
     "btn_forward_nav": "Вперёд →",
-
     # import
     "import_prompt": (
         "Отправьте файл <b>goodreads_library_export.csv</b>\n\n"
@@ -78,11 +75,9 @@ STRINGS: dict[str, str] = {
     "import_more": "...и ещё {n}",
     "cancelled": "Отменено.",
     "nothing_to_cancel": "Нет активной операции для отмены.",
-
     # language
     "language_choose": "Выберите язык:",
     "language_set": "Язык изменён: {lang}",
-
     # status labels (full, with emoji)
     "status_1": "📚 Хочу прочитать",
     "status_2": "📖 Читаю",
@@ -90,7 +85,6 @@ STRINGS: dict[str, str] = {
     "status_4": "⏸ Пауза",
     "status_5": "❌ Не закончил",
     "status_6": "🙈 Игнор",
-
     # status labels (short, with emoji)
     "status_1_short": "📚 Хочу",
     "status_2_short": "📖 Читаю",
