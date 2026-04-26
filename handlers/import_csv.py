@@ -11,6 +11,7 @@ from aiogram.types import Document, Message
 
 from api import HardcoverAPI
 from db import get_token
+from i18n import get_text
 
 router = Router()
 
@@ -56,46 +57,41 @@ def _parse_csv(content: bytes) -> list[dict]:
 
 
 @router.message(Command("cancel"))
-async def cmd_cancel(message: Message, state: FSMContext):
+async def cmd_cancel(message: Message, state: FSMContext, lang: str):
     current = await state.get_state()
     await state.clear()
     if current:
-        await message.answer("Отменено.")
+        await message.answer(get_text("cancelled", lang))
     else:
-        await message.answer("Нет активной операции для отмены.")
+        await message.answer(get_text("nothing_to_cancel", lang))
 
 
 @router.message(Command("import"))
-async def cmd_import(message: Message, state: FSMContext):
+async def cmd_import(message: Message, state: FSMContext, lang: str):
     token = await get_token(message.from_user.id)
     if not token:
-        await message.answer("Сначала авторизуйтесь: /token")
+        await message.answer(get_text("auth_required", lang))
         return
     await state.set_state(ImportStates.waiting_for_file)
-    await message.answer(
-        "Отправьте файл <b>goodreads_library_export.csv</b>\n\n"
-        "Экспортировать можно на goodreads.com: My Books → Import/Export → Export Library\n\n"
-        "Для отмены отправьте /cancel",
-        parse_mode="HTML",
-    )
+    await message.answer(get_text("import_prompt", lang), parse_mode="HTML")
 
 
 @router.message(ImportStates.waiting_for_file, F.document)
-async def process_import_file(message: Message, state: FSMContext):
+async def process_import_file(message: Message, state: FSMContext, lang: str):
     doc: Document = message.document
 
     if not doc.file_name.endswith(".csv"):
-        await message.answer("Пожалуйста, отправьте файл .csv или /cancel для отмены.")
+        await message.answer(get_text("import_wrong_file", lang))
         return
 
     await state.clear()
 
     token = await get_token(message.from_user.id)
     if not token:
-        await message.answer("Сначала авторизуйтесь: /token")
+        await message.answer(get_text("auth_required", lang))
         return
 
-    status_msg = await message.answer("⏳ Загружаю файл...")
+    status_msg = await message.answer(get_text("import_downloading", lang))
 
     bot = message.bot
     file = await bot.get_file(doc.file_id)
@@ -104,7 +100,7 @@ async def process_import_file(message: Message, state: FSMContext):
 
     rows = _parse_csv(content)
     total = len(rows)
-    await status_msg.edit_text(f"📋 Найдено {total} книг. Начинаю импорт...")
+    await status_msg.edit_text(get_text("import_found", lang, total=total))
 
     api = HardcoverAPI(token)
     ok = 0
@@ -121,7 +117,7 @@ async def process_import_file(message: Message, state: FSMContext):
         if i % 10 == 0:
             try:
                 await status_msg.edit_text(
-                    f"⏳ Обрабатываю {i}/{total}...\n" f"✅ {ok} добавлено | ⏭ {skipped} пропущено | ❌ {failed} ошибок"
+                    get_text("import_progress", lang, i=i, total=total, ok=ok, skipped=skipped, failed=failed)
                 )
             except Exception:
                 pass
@@ -161,16 +157,16 @@ async def process_import_file(message: Message, state: FSMContext):
 
         await asyncio.sleep(1.1)
 
-    summary = f"✅ Импорт завершён!\n\n" f"Добавлено: {ok}\n" f"Пропущено: {skipped}\n" f"Не найдено: {failed}"
+    summary = get_text("import_done", lang, ok=ok, skipped=skipped, failed=failed)
     if failed_titles:
         preview = failed_titles[:10]
-        summary += "\n\nНе найдены:\n" + "\n".join(f"• {t}" for t in preview)
+        summary += get_text("import_not_found_header", lang) + "\n".join(f"• {t}" for t in preview)
         if len(failed_titles) > 10:
-            summary += f"\n...и ещё {len(failed_titles) - 10}"
+            summary += "\n" + get_text("import_more", lang, n=len(failed_titles) - 10)
 
     await status_msg.edit_text(summary)
 
 
 @router.message(ImportStates.waiting_for_file)
-async def import_wrong_message(message: Message):
-    await message.answer("Пожалуйста, отправьте файл .csv или /cancel для отмены.")
+async def import_wrong_message(message: Message, lang: str):
+    await message.answer(get_text("import_wrong_file", lang))

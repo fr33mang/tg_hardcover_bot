@@ -43,8 +43,46 @@ The bot is available at [@hardcoverapp_bot](https://t.me/hardcoverapp_bot).
 | `/library` | View your library by status |
 | `/search <query>` | Search for books |
 | `/import` | Import library from Goodreads CSV |
+| `/language` | Change the bot language |
 
 You can also just send any text message to search.
+
+## Adding a New Language
+
+Translations live in the `locales/` directory. Each language is a single Python file with a `STRINGS` dict.
+
+**Steps to add a new language:**
+
+1. **Copy the English locale file** and rename it to the [IETF language tag](https://en.wikipedia.org/wiki/IETF_language_tag) prefix (e.g. `de` for German):
+   ```bash
+   cp locales/en.py locales/de.py
+   ```
+
+2. **Translate the values** in `locales/de.py`. Do not change the keys — they must match exactly across all locale files. Keep format placeholders like `{username}` as-is.
+
+3. **Register the language** in `i18n.py`:
+   ```python
+   from locales import en, ru, de  # add de
+
+   SUPPORTED_LANGS = {
+       "ru": ru.STRINGS,
+       "en": en.STRINGS,
+       "de": de.STRINGS,  # add this line
+   }
+   ```
+
+4. **Add the display name** in `handlers/language.py`:
+   ```python
+   LANG_NAMES = {
+       "ru": "🇷🇺 Русский",
+       "en": "🇬🇧 English",
+       "de": "🇩🇪 Deutsch",  # add this line
+   }
+   ```
+
+**Notes:**
+- If a key is missing in a locale file, the bot automatically falls back to English.
+- Telegram's `language_code` is used to auto-detect the language for new users. They can always override it with `/language`.
 
 ## Stack
 
