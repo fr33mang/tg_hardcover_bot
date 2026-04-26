@@ -67,7 +67,7 @@ async def get_language(telegram_id: int) -> str:
 async def set_language(telegram_id: int, lang: str) -> None:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute(
-            """INSERT INTO users (telegram_id, language) VALUES (?, ?)
+            """INSERT INTO users (telegram_id, bearer_token, language) VALUES (?, '', ?)
                ON CONFLICT(telegram_id) DO UPDATE SET language = excluded.language""",
             (telegram_id, lang),
         )
