@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - DATABASE_PATH=/data/bot.db
     volumes:
       - ./data:/data
