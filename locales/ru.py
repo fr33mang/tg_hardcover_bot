@@ -4,9 +4,9 @@ STRINGS: dict[str, str] = {
     "start_welcome": (
         "👋 Привет! Это бот для Hardcover.\n\n"
         "Чтобы начать:\n"
-        "1. Войдите на <a href='https://hardcover.app'>hardcover.app</a>\n"
-        "2. Перейдите в Settings → Account → API Token\n"
-        "3. Скопируйте токен и отправьте /token\n\n"
+        "1. Откройте <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
+        "   (или Settings → Account → API Token)\n"
+        "2. Скопируйте токен и отправьте /token\n\n"
         "После авторизации доступны команды:\n"
         "/shelves — ваши статусы\n"
         "/search — поиск книг\n"
@@ -14,7 +14,8 @@ STRINGS: dict[str, str] = {
     ),
     "token_prompt": (
         "Отправьте ваш Bearer токен с Hardcover.\n"
-        "Найти его можно в Settings → Account → API Token на hardcover.app\n\n"
+        "Получить его можно на <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
+        "(или Settings → Account → API Token)\n\n"
         "<i>Сообщение с токеном будет удалено для безопасности.</i>"
     ),
     "token_empty": "Токен не может быть пустым. Попробуйте /token ещё раз.",
@@ -26,8 +27,24 @@ STRINGS: dict[str, str] = {
         "/search — поиск книг\n"
         "/import — импорт из Goodreads CSV"
     ),
-    "auth_error": "Ошибка авторизации: {e}\nПопробуйте /token снова.",
+    "auth_error": "Не удалось авторизоваться. Проверьте токен и попробуйте /token снова.",
     "logged_out": "Вы вышли из аккаунта. Используйте /token для повторной авторизации.",
+    "help_unauthorized": (
+        "👋 <b>Hardcover Bot</b>\n\n"
+        "Чтобы начать:\n"
+        "1. Откройте <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
+        "   (или Settings → Account → API Token)\n"
+        "2. Скопируйте токен и отправьте /token"
+    ),
+    "help_authorized": (
+        "📚 <b>Hardcover Bot</b>\n\n"
+        "/search — поиск книг\n"
+        "/library — книжная библиотека\n"
+        "/import — импорт из Goodreads CSV\n"
+        "/language — сменить язык\n"
+        "/token — обновить токен Hardcover\n"
+        "/logout — выйти"
+    ),
     # search
     "search_usage": "Использование: /search &lt;название книги&gt;",
     "auth_required": "Сначала авторизуйтесь: /token",

@@ -39,11 +39,13 @@ The bot is available at [@hardcoverapp_bot](https://t.me/hardcoverapp_bot).
 
 | Command | Description |
 |---|---|
-| `/token <your_token>` | Authenticate with Hardcover |
-| `/library` | View your library by status |
 | `/search <query>` | Search for books |
+| `/library` | View your library by reading status |
 | `/import` | Import library from Goodreads CSV |
 | `/language` | Change the bot language |
+| `/help` | Show available commands |
+| `/token` | Authenticate with Hardcover |
+| `/logout` | Log out |
 
 You can also just send any text message to search.
 

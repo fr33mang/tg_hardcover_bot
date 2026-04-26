@@ -4,9 +4,9 @@ STRINGS: dict[str, str] = {
     "start_welcome": (
         "👋 Hi! This is a bot for Hardcover.\n\n"
         "To get started:\n"
-        "1. Log in at <a href='https://hardcover.app'>hardcover.app</a>\n"
-        "2. Go to Settings → Account → API Token\n"
-        "3. Copy the token and send /token\n\n"
+        "1. Open <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
+        "   (or Settings → Account → API Token)\n"
+        "2. Copy your API token and send /token\n\n"
         "Available commands after authorization:\n"
         "/shelves — your reading statuses\n"
         "/search — search for books\n"
@@ -14,7 +14,8 @@ STRINGS: dict[str, str] = {
     ),
     "token_prompt": (
         "Send your Bearer token from Hardcover.\n"
-        "You can find it at Settings → Account → API Token on hardcover.app\n\n"
+        "Get it at <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
+        "(or Settings → Account → API Token)\n\n"
         "<i>The message with the token will be deleted for security.</i>"
     ),
     "token_empty": "Token cannot be empty. Try /token again.",
@@ -26,8 +27,24 @@ STRINGS: dict[str, str] = {
         "/search — search for books\n"
         "/import — import from Goodreads CSV"
     ),
-    "auth_error": "Authorization error: {e}\nTry /token again.",
+    "auth_error": "Authorization failed. Check your token and try /token again.",
     "logged_out": "You've been logged out. Use /token to authorize again.",
+    "help_unauthorized": (
+        "👋 <b>Hardcover Bot</b>\n\n"
+        "To get started:\n"
+        "1. Open <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
+        "   (or Settings → Account → API Token)\n"
+        "2. Copy your API token and send /token"
+    ),
+    "help_authorized": (
+        "📚 <b>Hardcover Bot</b>\n\n"
+        "/search — search for books\n"
+        "/library — your reading library\n"
+        "/import — import from Goodreads CSV\n"
+        "/language — change language\n"
+        "/token — update Hardcover token\n"
+        "/logout — log out"
+    ),
     # search
     "search_usage": "Usage: /search &lt;book title&gt;",
     "auth_required": "Please authorize first: /token",
