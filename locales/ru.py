@@ -1,16 +1,13 @@
 STRINGS: dict[str, str] = {
     # auth
-    "already_authorized": "Вы уже авторизованы. Используйте /shelves, /search или /import.",
+    "already_authorized": "Вы уже авторизованы. Используйте /help для списка команд.",
     "start_welcome": (
         "👋 Привет! Это бот для Hardcover.\n\n"
         "Чтобы начать:\n"
         "1. Откройте <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
         "   (или Settings → Account → API Token)\n"
         "2. Скопируйте токен и отправьте /token\n\n"
-        "После авторизации доступны команды:\n"
-        "/shelves — ваши статусы\n"
-        "/search — поиск книг\n"
-        "/import — импорт из Goodreads CSV"
+        "После авторизации используйте /help для списка команд."
     ),
     "token_prompt": (
         "Отправьте ваш Bearer токен с Hardcover.\n"
@@ -20,13 +17,7 @@ STRINGS: dict[str, str] = {
     ),
     "token_empty": "Токен не может быть пустым. Попробуйте /token ещё раз.",
     "token_invalid": "Токен недействителен. Проверьте и попробуйте /token снова.",
-    "auth_success": (
-        "✅ Авторизован как @{username}\n\n"
-        "Теперь доступны:\n"
-        "/shelves — ваши статусы\n"
-        "/search — поиск книг\n"
-        "/import — импорт из Goodreads CSV"
-    ),
+    "auth_success": "✅ Авторизован как @{username}\n\nИспользуйте /help для списка команд.",
     "auth_error": "Не удалось авторизоваться. Проверьте токен и попробуйте /token снова.",
     "logged_out": "Вы вышли из аккаунта. Используйте /token для повторной авторизации.",
     "help_unauthorized": (

@@ -1,16 +1,13 @@
 STRINGS: dict[str, str] = {
     # auth
-    "already_authorized": "You're already authorized. Use /shelves, /search, or /import.",
+    "already_authorized": "You're already authorized. Use /help for a list of commands.",
     "start_welcome": (
         "👋 Hi! This is a bot for Hardcover.\n\n"
         "To get started:\n"
         "1. Open <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
         "   (or Settings → Account → API Token)\n"
         "2. Copy your API token and send /token\n\n"
-        "Available commands after authorization:\n"
-        "/shelves — your reading statuses\n"
-        "/search — search for books\n"
-        "/import — import from Goodreads CSV"
+        "After authorization use /help for a list of commands."
     ),
     "token_prompt": (
         "Send your Bearer token from Hardcover.\n"
@@ -20,13 +17,7 @@ STRINGS: dict[str, str] = {
     ),
     "token_empty": "Token cannot be empty. Try /token again.",
     "token_invalid": "Token is invalid. Check it and try /token again.",
-    "auth_success": (
-        "✅ Authorized as @{username}\n\n"
-        "Now available:\n"
-        "/shelves — your reading statuses\n"
-        "/search — search for books\n"
-        "/import — import from Goodreads CSV"
-    ),
+    "auth_success": "✅ Authorized as @{username}\n\nUse /help for a list of commands.",
     "auth_error": "Authorization failed. Check your token and try /token again.",
     "logged_out": "You've been logged out. Use /token to authorize again.",
     "help_unauthorized": (
