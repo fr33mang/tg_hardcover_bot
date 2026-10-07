@@ -7,6 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from api import HardcoverAPI
+from commands import set_user_commands
 from db import delete_token, get_token, save_token
 from i18n import get_text
 
@@ -21,6 +22,7 @@ class AuthStates(StatesGroup):
 async def cmd_start(message: Message, lang: str):
     has_token = await get_token(message.from_user.id)
     if has_token:
+        await set_user_commands(message.bot, message.chat.id, lang)
         await message.answer(get_text("already_authorized", lang))
         return
     await message.answer(get_text("start_welcome", lang), parse_mode="HTML")
@@ -63,6 +65,7 @@ async def process_token(message: Message, state: FSMContext, lang: str):
             return
         username = user.get("username", "")
         await save_token(message.from_user.id, token, username)
+        await set_user_commands(message.bot, message.chat.id, lang)
         await message.answer(get_text("auth_success", lang, username=username))
     except Exception:
         logging.exception("Token auth failed for user %s", message.from_user.id)

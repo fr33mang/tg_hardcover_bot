@@ -8,6 +8,7 @@ from aiogram.types import (
     Message,
 )
 
+from commands import set_user_commands
 from db import set_language
 from i18n import SUPPORTED_LANGS, get_text
 
@@ -46,6 +47,7 @@ async def language_selected(callback: CallbackQuery, callback_data: LangSelectCa
         await callback.answer()
         return
     await set_language(callback.from_user.id, new_lang)
+    await set_user_commands(callback.bot, callback.message.chat.id, new_lang)
     name = LANG_NAMES.get(new_lang, new_lang)
     await callback.answer(get_text("language_set", new_lang, name=name))
     await callback.message.edit_reply_markup(reply_markup=_language_keyboard(new_lang))
