@@ -1,4 +1,12 @@
 STRINGS: dict[str, str] = {
+    # bot command menu
+    "cmd_search": "Search for books",
+    "cmd_library": "Your reading library",
+    "cmd_import": "Import from Goodreads CSV",
+    "cmd_language": "Change language",
+    "cmd_help": "Show available commands",
+    "cmd_token": "Authorize with Hardcover token",
+    "cmd_logout": "Log out",
     # auth
     "already_authorized": "You're already authorized. Use /help for a list of commands.",
     "start_welcome": (
