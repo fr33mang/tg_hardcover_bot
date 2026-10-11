@@ -6,8 +6,9 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from api import HardcoverAPI
 from callbacks import BookDetailCallback
-from db import get_token
+from db import get_token, set_nav_context
 from i18n import get_text
+from screen import show_screen
 
 router = Router()
 
@@ -61,7 +62,7 @@ def _format_book_row(book: dict, lang: str, rating=None) -> str:
     return f"<b>{title}</b>{author_str}{stars}{hc_link}"
 
 
-async def _send_library(api: HardcoverAPI, lang: str, message: Message = None, callback: CallbackQuery = None):
+async def render_library(api: HardcoverAPI, lang: str) -> tuple[str, any]:
     data = await api.get_my_shelves()
     counts = data["counts"]
     lists = data["lists"]
@@ -87,14 +88,7 @@ async def _send_library(api: HardcoverAPI, lang: str, message: Message = None, c
             )
         )
 
-    text = get_text("library_title", lang)
-    kb = builder.as_markup()
-
-    if message:
-        await message.answer(text, parse_mode="HTML", reply_markup=kb)
-    else:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
-        await callback.answer()
+    return get_text("library_title", lang), builder.as_markup()
 
 
 @router.message(Command("library", "shelves"))
@@ -105,9 +99,12 @@ async def cmd_library(message: Message, lang: str):
         return
     api = HardcoverAPI(token)
     try:
-        await _send_library(api, lang, message=message)
+        text, kb = await render_library(api, lang)
     except Exception as e:
         await message.answer(get_text("error_generic", lang, e=e))
+        return
+    await set_nav_context(message.from_user.id, None)
+    await show_screen(text, kb, message=message)
 
 
 @router.callback_query(BackToLibraryCallback.filter())
@@ -118,9 +115,13 @@ async def back_to_library_callback(callback: CallbackQuery, lang: str):
         return
     api = HardcoverAPI(token)
     try:
-        await _send_library(api, lang, callback=callback)
+        text, kb = await render_library(api, lang)
     except Exception as e:
         await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
+        return
+    await set_nav_context(callback.from_user.id, None)
+    await show_screen(text, kb, callback=callback)
+    await callback.answer()
 
 
 def _build_book_list(
@@ -159,6 +160,18 @@ def _build_book_list(
     return "\n".join(lines), builder.as_markup()
 
 
+async def render_shelf(api: HardcoverAPI, lang: str, status_id: int, offset: int) -> tuple[str, any] | None:
+    books = await api.get_shelf_books(status_id, limit=PAGE_SIZE, offset=offset)
+    if not books:
+        return None
+    title = f"<b>{get_text(f'status_{status_id}', lang)}</b>"
+    prev_cb = ShelfPageCallback(status_id=status_id, offset=offset - PAGE_SIZE).pack() if offset > 0 else None
+    next_cb = (
+        ShelfPageCallback(status_id=status_id, offset=offset + PAGE_SIZE).pack() if len(books) == PAGE_SIZE else None
+    )
+    return _build_book_list(books, title, lang, offset, BackToLibraryCallback().pack(), prev_cb, next_cb)
+
+
 @router.callback_query(ShelfPageCallback.filter())
 async def shelf_page_callback(callback: CallbackQuery, callback_data: ShelfPageCallback, lang: str):
     token = await get_token(callback.from_user.id)
@@ -167,32 +180,31 @@ async def shelf_page_callback(callback: CallbackQuery, callback_data: ShelfPageC
         return
 
     api = HardcoverAPI(token)
-    status_id = callback_data.status_id
-    offset = callback_data.offset
-
     try:
-        books = await api.get_shelf_books(status_id, limit=PAGE_SIZE, offset=offset)
+        screen = await render_shelf(api, lang, callback_data.status_id, callback_data.offset)
     except Exception as e:
         await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
         return
-
-    if not books:
+    if screen is None:
         await callback.answer(get_text("list_empty", lang), show_alert=True)
         return
 
-    title = f"<b>{get_text(f'status_{status_id}', lang)}</b>"
-    prev_cb = ShelfPageCallback(status_id=status_id, offset=offset - PAGE_SIZE).pack() if offset > 0 else None
-    next_cb = (
-        ShelfPageCallback(status_id=status_id, offset=offset + PAGE_SIZE).pack() if len(books) == PAGE_SIZE else None
+    await set_nav_context(
+        callback.from_user.id, {"kind": "shelf", "id": callback_data.status_id, "offset": callback_data.offset}
     )
-    back_cb = BackToLibraryCallback().pack()
-
-    text, kb = _build_book_list(books, title, lang, offset, back_cb, prev_cb, next_cb)
-    try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
-    except Exception:
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+    await show_screen(*screen, callback=callback)
     await callback.answer()
+
+
+async def render_list(api: HardcoverAPI, lang: str, list_id: int, offset: int) -> tuple[str, any] | None:
+    result = await api.get_list_books(list_id, limit=PAGE_SIZE, offset=offset)
+    books = result.get("books", []) if result else []
+    if not books:
+        return None
+    title = f"🔖 <b>{result['name']}</b>"
+    prev_cb = ListPageCallback(list_id=list_id, offset=offset - PAGE_SIZE).pack() if offset > 0 else None
+    next_cb = ListPageCallback(list_id=list_id, offset=offset + PAGE_SIZE).pack() if len(books) == PAGE_SIZE else None
+    return _build_book_list(books, title, lang, offset, BackToLibraryCallback().pack(), prev_cb, next_cb)
 
 
 @router.callback_query(ListPageCallback.filter())
@@ -203,28 +215,17 @@ async def list_page_callback(callback: CallbackQuery, callback_data: ListPageCal
         return
 
     api = HardcoverAPI(token)
-    list_id = callback_data.list_id
-    offset = callback_data.offset
-
     try:
-        result = await api.get_list_books(list_id, limit=PAGE_SIZE, offset=offset)
+        screen = await render_list(api, lang, callback_data.list_id, callback_data.offset)
     except Exception as e:
         await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
         return
-
-    books = result.get("books", [])
-    if not books:
+    if screen is None:
         await callback.answer(get_text("list_empty", lang), show_alert=True)
         return
 
-    title = f"🔖 <b>{result['name']}</b>"
-    prev_cb = ListPageCallback(list_id=list_id, offset=offset - PAGE_SIZE).pack() if offset > 0 else None
-    next_cb = ListPageCallback(list_id=list_id, offset=offset + PAGE_SIZE).pack() if len(books) == PAGE_SIZE else None
-    back_cb = BackToLibraryCallback().pack()
-
-    text, kb = _build_book_list(books, title, lang, offset, back_cb, prev_cb, next_cb)
-    try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
-    except Exception:
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+    await set_nav_context(
+        callback.from_user.id, {"kind": "list", "id": callback_data.list_id, "offset": callback_data.offset}
+    )
+    await show_screen(*screen, callback=callback)
     await callback.answer()

@@ -30,3 +30,7 @@ class BackToBookCallback(CallbackData, prefix="back_book"):
 
 class CloseMessageCallback(CallbackData, prefix="close"):
     pass
+
+
+class BackCallback(CallbackData, prefix="back"):
+    """Return to the list the user came from (stored in nav_context)."""
