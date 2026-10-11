@@ -44,3 +44,17 @@ class MoreCallback(CallbackData, prefix="more"):
 
 class NoopCallback(CallbackData, prefix="noop"):
     """A button that is only a label (e.g. the page indicator)."""
+
+
+class CardPanelCallback(CallbackData, prefix="panel"):
+    """Switch the card's keyboard: main | more | rate | desc (full description)."""
+
+    book_id: int
+    panel: str
+
+
+class RateCallback(CallbackData, prefix="rate"):
+    """half = rating × 2 (7 → 3.5); 0 clears the rating."""
+
+    book_id: int
+    half: int
