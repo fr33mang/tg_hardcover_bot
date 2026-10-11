@@ -69,12 +69,11 @@ def _format_book_line(book: dict, lang: str) -> str:
         author = html.escape(", ".join(authors[:2])) + f" {get_text('et_al', lang)}"
     elif author:
         author = html.escape(author)
-    parts = [f"<b>{safe_title}</b>"]
+    line = f"<b>{safe_title}</b>"
     if author:
-        parts.append(author)
+        line += f" — {author}"
     if year:
-        parts.append(f"({year})")
-    line = " — ".join(parts[:2]) + (f" {parts[2]}" if len(parts) > 2 else "")
+        line += f" ({year})"
     return line + link
 
 
