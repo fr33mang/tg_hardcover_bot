@@ -4,7 +4,7 @@ from aiogram import Router
 from aiogram.types import CallbackQuery
 
 from api import HardcoverAPI
-from callbacks import BackCallback
+from callbacks import BackCallback, NoopCallback
 from db import get_nav_context, get_token
 from handlers.search import render_search
 from handlers.shelves import render_library, render_list, render_shelf
@@ -40,4 +40,9 @@ async def back_callback(callback: CallbackQuery, lang: str):
         return
 
     await show_screen(*screen, callback=callback)
+    await callback.answer()
+
+
+@router.callback_query(NoopCallback.filter())
+async def noop_callback(callback: CallbackQuery):
     await callback.answer()

@@ -47,6 +47,11 @@ class HardcoverAPI:
         return users[0] if users else None
 
     async def search_books(self, query: str, limit: int = 5, page: int = 1) -> list[dict]:
+        books, _ = await self.search_books_page(query, limit=limit, page=page)
+        return books
+
+    async def search_books_page(self, query: str, limit: int = 5, page: int = 1) -> tuple[list[dict], int]:
+        """One page of search hits plus the total number of matches."""
         gql = """
         query Search($q: String!, $per_page: Int!, $page: Int!) {
             search(query: $q, query_type: "Book", per_page: $per_page, page: $page) {
@@ -72,9 +77,10 @@ class HardcoverAPI:
                     "authors": authors,
                     "release_year": doc.get("release_year"),
                     "image_url": (doc.get("image") or {}).get("url"),
+                    "rating": doc.get("rating"),
                 }
             )
-        return books
+        return books, int(raw.get("found") or 0)
 
     async def search_books_by_isbn(self, isbn: str) -> list[dict]:
         gql = """
@@ -127,11 +133,13 @@ class HardcoverAPI:
         counts = {i: me.get(f"s{i}", {}).get("aggregate", {}).get("count", 0) for i in range(1, 7)}
         return {"counts": counts, "lists": me.get("lists", [])}
 
-    async def get_list_books(self, list_id: int, limit: int = 10, offset: int = 0) -> list[dict]:
+    async def get_list_books(self, list_id: int, limit: int = 10, offset: int = 0) -> dict | None:
+        """A page of a list: {"name", "total", "books"}; None if the list does not exist."""
         gql = """
         query GetListBooks($list_id: Int!, $limit: Int!, $offset: Int!) {
             lists(where: {id: {_eq: $list_id}}) {
                 name
+                books_count
                 list_books(limit: $limit, offset: $offset) {
                     id
                     book { id title slug release_year
@@ -144,14 +152,16 @@ class HardcoverAPI:
         data = await self.execute_query(gql, {"list_id": list_id, "limit": limit, "offset": offset})
         lists = data.get("lists", [])
         if not lists:
-            return []
+            return None
         result = lists[0]
-        return {"name": result["name"], "books": result.get("list_books", [])}
+        return {"name": result["name"], "total": result.get("books_count") or 0, "books": result.get("list_books", [])}
 
-    async def get_shelf_books(self, status_id: int, limit: int = 10, offset: int = 0) -> list[dict]:
+    async def get_shelf_books(self, status_id: int, limit: int = 10, offset: int = 0) -> tuple[list[dict], int]:
+        """A page of user_books with the given status, plus how many there are in total."""
         gql = """
         query GetShelfBooks($status_id: Int!, $limit: Int!, $offset: Int!) {
             me {
+                total: user_books_aggregate(where: {status_id: {_eq: $status_id}}) { aggregate { count } }
                 user_books(
                     where: {status_id: {_eq: $status_id}},
                     limit: $limit,
@@ -168,8 +178,9 @@ class HardcoverAPI:
         }
         """
         data = await self.execute_query(gql, {"status_id": status_id, "limit": limit, "offset": offset})
-        me = data.get("me", [{}])
-        return me[0].get("user_books", []) if me else []
+        me = data.get("me") or [{}]
+        total = ((me[0].get("total") or {}).get("aggregate") or {}).get("count") or 0
+        return me[0].get("user_books", []), total
 
     async def get_user_book(self, book_id: int) -> dict | None:
         gql = """

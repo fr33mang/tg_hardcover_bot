@@ -4,15 +4,13 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from api import HardcoverAPI, is_author
-from callbacks import BookDetailCallback
+from api import HardcoverAPI
 from db import get_token, set_nav_context
 from i18n import get_text
 from screen import show_screen
+from views import PAGE_SIZE, build_book_list, row_from_book
 
 router = Router()
-
-PAGE_SIZE = 10
 
 STATUS_IDS = [1, 2, 3, 4, 5, 6]
 
@@ -29,37 +27,6 @@ class ListPageCallback(CallbackData, prefix="lstpage"):
 
 class BackToLibraryCallback(CallbackData, prefix="lib_back"):
     pass
-
-
-def _dedup_authors_by_id(contribs: list[dict]) -> list[str]:
-    seen_ids = set()
-    names = []
-    for c in contribs:
-        if not is_author(c):
-            continue
-        author = c["author"]
-        aid = author.get("id")
-        if aid and aid in seen_ids:
-            continue
-        if aid:
-            seen_ids.add(aid)
-        names.append(author["name"])
-    return names
-
-
-def _format_book_row(book: dict, lang: str, rating=None) -> str:
-    title = book.get("title", "?")
-    slug = book.get("slug", "")
-    authors = _dedup_authors_by_id(book.get("contributions") or [])
-    if len(authors) > 2:
-        author_str = f" — {', '.join(authors[:2])} {get_text('et_al', lang)}"
-    elif authors:
-        author_str = f" — {', '.join(authors)}"
-    else:
-        author_str = ""
-    stars = f" {'⭐' * int(rating)}" if rating else ""
-    hc_link = f' <a href="https://hardcover.app/books/{slug}">🔗</a>' if slug else ""
-    return f"<b>{title}</b>{author_str}{stars}{hc_link}"
 
 
 async def render_library(api: HardcoverAPI, lang: str) -> tuple[str, any]:
@@ -124,52 +91,30 @@ async def back_to_library_callback(callback: CallbackQuery, lang: str):
     await callback.answer()
 
 
-def _build_book_list(
-    items: list[dict], title: str, lang: str, offset: int, back_cb: str, prev_cb: str | None, next_cb: str | None
-) -> tuple[str, any]:
-    page = offset // PAGE_SIZE + 1
-    lines = [f"{title} {get_text('page_indicator', lang, page=page)}\n"]
-    book_ids = []
-
-    for i, item in enumerate(items, 1):
-        book = item.get("book", {})
-        rating = item.get("rating")
-        lines.append(f"{i}. {_format_book_row(book, lang, rating)}")
-        book_ids.append(book.get("id"))
-
-    lines.append(f"\n<i>{get_text('shelf_hint', lang)}</i>")
-
-    builder = InlineKeyboardBuilder()
-    num_btns = [
-        InlineKeyboardButton(text=str(i), callback_data=BookDetailCallback(book_id=bid).pack())
-        for i, bid in enumerate(book_ids, 1)
-    ]
-    for i in range(0, len(num_btns), 5):
-        builder.row(*num_btns[i : i + 5])
-
-    nav_btns = []
-    if prev_cb:
-        nav_btns.append(InlineKeyboardButton(text=get_text("btn_back_nav", lang), callback_data=prev_cb))
-    if next_cb:
-        nav_btns.append(InlineKeyboardButton(text=get_text("btn_forward_nav", lang), callback_data=next_cb))
-    if nav_btns:
-        builder.row(*nav_btns)
-
-    builder.row(InlineKeyboardButton(text=get_text("btn_library", lang), callback_data=back_cb))
-
-    return "\n".join(lines), builder.as_markup()
+def _library_button(lang: str) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text=get_text("btn_library", lang), callback_data=BackToLibraryCallback().pack())
 
 
 async def render_shelf(api: HardcoverAPI, lang: str, status_id: int, offset: int) -> tuple[str, any] | None:
-    books = await api.get_shelf_books(status_id, limit=PAGE_SIZE, offset=offset)
-    if not books:
+    items, total = await api.get_shelf_books(status_id, limit=PAGE_SIZE, offset=offset)
+    if not items:
         return None
+    rows = [row_from_book(ub.get("book") or {}, ub.get("rating")) for ub in items]
     title = f"<b>{get_text(f'status_{status_id}', lang)}</b>"
     prev_cb = ShelfPageCallback(status_id=status_id, offset=offset - PAGE_SIZE).pack() if offset > 0 else None
     next_cb = (
-        ShelfPageCallback(status_id=status_id, offset=offset + PAGE_SIZE).pack() if len(books) == PAGE_SIZE else None
+        ShelfPageCallback(status_id=status_id, offset=offset + PAGE_SIZE).pack() if offset + PAGE_SIZE < total else None
     )
-    return _build_book_list(books, title, lang, offset, BackToLibraryCallback().pack(), prev_cb, next_cb)
+    return build_book_list(
+        rows,
+        title,
+        lang,
+        page=offset // PAGE_SIZE + 1,
+        total=total,
+        prev_cb=prev_cb,
+        next_cb=next_cb,
+        bottom=[_library_button(lang)],
+    )
 
 
 @router.callback_query(ShelfPageCallback.filter())
@@ -198,13 +143,26 @@ async def shelf_page_callback(callback: CallbackQuery, callback_data: ShelfPageC
 
 async def render_list(api: HardcoverAPI, lang: str, list_id: int, offset: int) -> tuple[str, any] | None:
     result = await api.get_list_books(list_id, limit=PAGE_SIZE, offset=offset)
-    books = result.get("books", []) if result else []
-    if not books:
+    items = result["books"] if result else []
+    if not items:
         return None
+    total = result["total"]
+    rows = [row_from_book(lb.get("book") or {}) for lb in items]
     title = f"🔖 <b>{result['name']}</b>"
     prev_cb = ListPageCallback(list_id=list_id, offset=offset - PAGE_SIZE).pack() if offset > 0 else None
-    next_cb = ListPageCallback(list_id=list_id, offset=offset + PAGE_SIZE).pack() if len(books) == PAGE_SIZE else None
-    return _build_book_list(books, title, lang, offset, BackToLibraryCallback().pack(), prev_cb, next_cb)
+    next_cb = (
+        ListPageCallback(list_id=list_id, offset=offset + PAGE_SIZE).pack() if offset + PAGE_SIZE < total else None
+    )
+    return build_book_list(
+        rows,
+        title,
+        lang,
+        page=offset // PAGE_SIZE + 1,
+        total=total,
+        prev_cb=prev_cb,
+        next_cb=next_cb,
+        bottom=[_library_button(lang)],
+    )
 
 
 @router.callback_query(ListPageCallback.filter())

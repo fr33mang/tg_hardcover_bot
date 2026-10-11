@@ -40,3 +40,7 @@ class MoreCallback(CallbackData, prefix="more"):
     """An item on the settings screen: language | import | token | logout."""
 
     action: str
+
+
+class NoopCallback(CallbackData, prefix="noop"):
+    """A button that is only a label (e.g. the page indicator)."""

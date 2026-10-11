@@ -77,7 +77,6 @@ STRINGS: dict[str, str] = {
     "removed_from_list": "Удалено из списка.",
     "added_to_list": "Добавлено в список!",
     "inline_auth_prompt": "Авторизуйтесь в боте",
-    "search_hint": "Нажмите на номер книги для подробностей",
     "error_generic": "Ошибка: {e}",
     "book_not_found": "Книга не найдена.",
     "load_error": "Ошибка загрузки книги: {e}",
@@ -86,8 +85,7 @@ STRINGS: dict[str, str] = {
     # shelves
     "library_title": "📖 <b>Библиотека</b>",
     "list_empty": "Список пуст.",
-    "page_indicator": "(стр. {page})",
-    "shelf_hint": "Нажмите на номер для управления книгой",
+    "page_indicator": "· стр. {page}/{pages}",
     "btn_library": "📖 Библиотека",
     "btn_back_nav": "← Назад",
     "btn_forward_nav": "Вперёд →",

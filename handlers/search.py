@@ -30,10 +30,9 @@ from callbacks import (
 from db import get_nav_context, get_token, set_nav_context
 from i18n import get_text
 from screen import show_screen
+from views import PAGE_SIZE, book_url, build_book_list, row_from_search
 
 router = Router()
-
-SEARCH_PAGE_SIZE = 5
 
 
 class SearchPageCallback(CallbackData, prefix="search"):
@@ -49,65 +48,6 @@ def _dedup_authors(authors: list[str]) -> list[str]:
             seen.add(key)
             result.append(a)
     return result
-
-
-def _book_url(book: dict) -> str | None:
-    slug = book.get("slug", "")
-    return f"https://hardcover.app/books/{slug}" if slug else None
-
-
-def _format_book_line(book: dict, lang: str) -> str:
-    title = book.get("title", "?")
-    authors = _dedup_authors(book.get("authors") or [])
-    year = book.get("release_year") or ""
-    author = ", ".join(authors) if authors else ""
-
-    url = _book_url(book)
-    safe_title = html.escape(title)
-    link = f' <a href="{url}">🔗</a>' if url else ""
-    if len(authors) > 2:
-        author = html.escape(", ".join(authors[:2])) + f" {get_text('et_al', lang)}"
-    elif author:
-        author = html.escape(author)
-    line = f"<b>{safe_title}</b>"
-    if author:
-        line += f" — {author}"
-    if year:
-        line += f" ({year})"
-    return line + link
-
-
-def _build_results_message(books: list[dict], query: str, lang: str, page: int = 1) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [f'🔍 <b>"{html.escape(query)}"</b>\n']
-    for i, book in enumerate(books, 1):
-        lines.append(f"{i}. {_format_book_line(book, lang)}")
-    lines.append(f"\n<i>{get_text('search_hint', lang)}</i>")
-
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        *[
-            InlineKeyboardButton(text=str(i), callback_data=BookDetailCallback(book_id=book["id"]).pack())
-            for i, book in enumerate(books, 1)
-        ]
-    )
-
-    nav = []
-    if page > 1:
-        nav.append(
-            InlineKeyboardButton(
-                text=get_text("btn_prev", lang), callback_data=SearchPageCallback(page=page - 1).pack()
-            )
-        )
-    if len(books) == SEARCH_PAGE_SIZE:
-        nav.append(
-            InlineKeyboardButton(
-                text=get_text("btn_next", lang), callback_data=SearchPageCallback(page=page + 1).pack()
-            )
-        )
-    if nav:
-        builder.row(*nav)
-
-    return "\n".join(lines), builder.as_markup()
 
 
 def _build_book_detail_text(book: dict, lang: str) -> str:
@@ -203,10 +143,14 @@ async def text_search(message: Message, lang: str):
 
 
 async def render_search(api: HardcoverAPI, lang: str, query: str, page: int) -> tuple[str, InlineKeyboardMarkup] | None:
-    books = await api.search_books(query, limit=SEARCH_PAGE_SIZE, page=page)
+    books, total = await api.search_books_page(query, limit=PAGE_SIZE, page=page)
     if not books:
         return None
-    return _build_results_message(books, query, lang, page=page)
+    rows = [row_from_search(b) for b in books]
+    title = f'🔍 <b>"{html.escape(query)}"</b>'
+    prev_cb = SearchPageCallback(page=page - 1).pack() if page > 1 else None
+    next_cb = SearchPageCallback(page=page + 1).pack() if page * PAGE_SIZE < total else None
+    return build_book_list(rows, title, lang, page=page, total=total, prev_cb=prev_cb, next_cb=next_cb)
 
 
 async def _do_search(message: Message, query: str, lang: str):
@@ -282,7 +226,7 @@ async def book_detail_callback(callback: CallbackQuery, callback_data: BookDetai
 
     current_status_id = user_book["status_id"] if user_book else None
     text = _build_book_detail_text(book, lang)
-    kb = _build_book_buttons(book["id"], lang, current_status_id, book_url=_book_url(book))
+    kb = _build_book_buttons(book["id"], lang, current_status_id, book_url=book_url(book))
     await show_screen(text, kb, callback=callback, cover_url=book.get("image_url"))
     await callback.answer()
 
@@ -298,7 +242,7 @@ async def add_book_callback(callback: CallbackQuery, callback_data: AddBookCallb
     try:
         await api.add_or_update_book(callback_data.book_id, callback_data.status_id)
         book = await api.get_book(callback_data.book_id)
-        url = _book_url(book) if book else None
+        url = book_url(book) if book else None
         new_kb = _build_book_buttons(callback_data.book_id, lang, callback_data.status_id, book_url=url)
         try:
             await callback.message.edit_reply_markup(reply_markup=new_kb)
@@ -325,7 +269,7 @@ async def delete_book_callback(callback: CallbackQuery, callback_data: DeleteBoo
         )
         if user_book:
             await api.delete_user_book(user_book["id"])
-        url = _book_url(book) if book else None
+        url = book_url(book) if book else None
         new_kb = _build_book_buttons(callback_data.book_id, lang, None, book_url=url)
         try:
             await callback.message.edit_reply_markup(reply_markup=new_kb)
@@ -396,7 +340,7 @@ async def back_to_book_callback(callback: CallbackQuery, callback_data: BackToBo
             api.get_book(callback_data.book_id),
         )
         current_status_id = user_book["status_id"] if user_book else None
-        url = _book_url(book) if book else None
+        url = book_url(book) if book else None
         kb = _build_book_buttons(callback_data.book_id, lang, current_status_id, book_url=url)
         await callback.message.edit_reply_markup(reply_markup=kb)
         await callback.answer()
