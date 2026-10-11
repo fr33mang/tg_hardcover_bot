@@ -7,10 +7,18 @@ the text (status line, rating) and the keyboard never drift apart.
 import asyncio
 import html
 import logging
+import re
 import time
 
-from aiogram import Router
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from api import HardcoverAPI
@@ -23,17 +31,25 @@ from callbacks import (
     CardPanelCallback,
     CloseMessageCallback,
     DeleteBookCallback,
+    ProgressCallback,
     RateCallback,
     ShowListsCallback,
 )
 from db import get_token
 from i18n import get_text
 from screen import show_screen
-from views import book_url, dedup_names
+from views import book_url, dedup_names, progress_bar, total_pages
 
 router = Router()
 
+
+class ProgressStates(StatesGroup):
+    waiting_for_page = State()
+
+
 STATUS_READ = 3
+STATUS_READING = 2
+PROGRESS_STEPS = (10, 25, 50)
 PRIMARY_STATUSES = (1, 2, 3)
 OTHER_STATUSES = (4, 5, 6)
 DESC_SHORT = 500
@@ -92,6 +108,9 @@ def _card_text(book: dict, user_book: dict | None, lang: str, full_desc: bool) -
         state = get_text(f"status_{user_book['status_id']}", lang)
         if user_book.get("rating"):
             state += f" · {get_text('my_rating', lang)} ⭐ {_fmt_rating(user_book['rating'])}"
+        pages = _current_pages(user_book)
+        if user_book["status_id"] == STATUS_READING and pages:
+            state += "\n" + progress_bar(pages, total_pages(user_book, book), lang)
     else:
         state = get_text("not_on_shelf", lang)
     lines.append(f"<i>{state}</i>")
@@ -104,6 +123,16 @@ def _card_text(book: dict, user_book: dict | None, lang: str, full_desc: bool) -
             desc = desc[:limit].rstrip() + "…"
         lines += ["", desc]
     return "\n".join(lines)
+
+
+def _current_read(user_book: dict | None) -> dict | None:
+    reads = (user_book or {}).get("user_book_reads") or []
+    return reads[0] if reads else None
+
+
+def _current_pages(user_book: dict | None) -> int:
+    read = _current_read(user_book)
+    return (read or {}).get("progress_pages") or 0
 
 
 def _description_truncated(book: dict) -> bool:
@@ -126,6 +155,13 @@ def _main_keyboard(book: dict, user_book: dict | None, lang: str) -> InlineKeybo
     current = user_book["status_id"] if user_book else None
     b = InlineKeyboardBuilder()
     b.row(*[_status_button(book_id, s, current, lang) for s in PRIMARY_STATUSES])
+    if current == STATUS_READING:
+        b.row(
+            InlineKeyboardButton(
+                text=get_text("btn_progress", lang),
+                callback_data=CardPanelCallback(book_id=book_id, panel="progress").pack(),
+            )
+        )
     b.row(
         InlineKeyboardButton(
             text=get_text("btn_rate", lang), callback_data=CardPanelCallback(book_id=book_id, panel="rate").pack()
@@ -191,6 +227,29 @@ def _rate_keyboard(book: dict, user_book: dict | None, lang: str, after_read: bo
     return b.as_markup()
 
 
+def _progress_keyboard(book: dict, lang: str) -> InlineKeyboardMarkup:
+    book_id = book["id"]
+    b = InlineKeyboardBuilder()
+    b.row(
+        *[
+            InlineKeyboardButton(text=f"+{n}", callback_data=ProgressCallback(book_id=book_id, delta=n).pack())
+            for n in PROGRESS_STEPS
+        ]
+    )
+    b.row(
+        InlineKeyboardButton(
+            text=get_text("btn_enter_page", lang), callback_data=ProgressCallback(book_id=book_id, delta=0).pack()
+        )
+    )
+    b.row(
+        InlineKeyboardButton(
+            text=get_text("btn_finished", lang), callback_data=ProgressCallback(book_id=book_id, delta=-1).pack()
+        )
+    )
+    b.row(_to_book_button(book_id, lang))
+    return b.as_markup()
+
+
 def _lists_keyboard(book_id: int, lists: list[dict], lang: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for lst in lists:
@@ -224,6 +283,8 @@ async def render_card(
         kb = _lists_keyboard(book_id, lists, lang) if lists else _main_keyboard(book, user_book, lang)
     elif panel == "desc":
         kb = _more_keyboard(book, user_book, lang, full_desc=True)
+    elif panel == "progress" and user_book and user_book["status_id"] == STATUS_READING:
+        kb = _progress_keyboard(book, lang)
     else:
         kb = _main_keyboard(book, user_book, lang)
     return text, kb, book.get("image_url")
@@ -367,6 +428,106 @@ async def rate(callback: CallbackQuery, callback_data: RateCallback, lang: str):
         return
     toast = get_text("rated_toast", lang, rating=_fmt_rating(rating)) if rating else get_text("rating_removed", lang)
     await callback.answer(toast)
+
+
+async def _apply_progress(api: HardcoverAPI, book_id: int, pages: int) -> tuple[dict, int]:
+    """Write `pages` on the open read of the book; returns (user_book, pages actually stored)."""
+    user_book = await api.get_user_book(book_id)
+    if not user_book:
+        raise ValueError("not on shelf")
+    total = total_pages(user_book, _book_cache.get(book_id, (0, None))[1])
+    pages = max(0, min(pages, total) if total else pages)
+    read = _current_read(user_book)
+    await api.set_progress(user_book["id"], (read or {}).get("id"), pages, user_book.get("edition_id"))
+    return user_book, pages
+
+
+@router.callback_query(ProgressCallback.filter(F.delta > 0))
+async def add_pages(callback: CallbackQuery, callback_data: ProgressCallback, lang: str):
+    api = await _api_for(callback, lang)
+    if not api:
+        return
+    try:
+        user_book = await api.get_user_book(callback_data.book_id)
+        _, pages = await _apply_progress(api, callback_data.book_id, _current_pages(user_book) + callback_data.delta)
+        await _show_card(callback, api, callback_data.book_id, lang, panel="progress")
+    except Exception as e:
+        await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
+        return
+    await callback.answer(get_text("progress_toast", lang, pages=pages))
+
+
+@router.callback_query(ProgressCallback.filter(F.delta == 0))
+async def ask_page(callback: CallbackQuery, callback_data: ProgressCallback, state: FSMContext, lang: str):
+    prompt = await callback.message.answer(get_text("progress_prompt", lang))
+    await state.set_state(ProgressStates.waiting_for_page)
+    await state.update_data(book_id=callback_data.book_id, prompt_id=prompt.message_id)
+    await callback.answer()
+
+
+@router.message(ProgressStates.waiting_for_page, F.text.regexp(r"^\s*\d{1,5}\s*%?\s*$"))
+async def page_entered(message: Message, state: FSMContext, lang: str):
+    data = await state.get_data()
+    await state.clear()
+    book_id = data.get("book_id")
+    token = await get_token(message.from_user.id)
+    if not token or not book_id:
+        return
+    api = HardcoverAPI(token)
+    raw = message.text.strip()
+    try:
+        await message.bot.delete_message(message.chat.id, data.get("prompt_id"))
+    except Exception:
+        pass
+    try:
+        value = int(re.sub(r"\D", "", raw))
+        if raw.endswith("%"):
+            user_book = await api.get_user_book(book_id)
+            total = total_pages(user_book, await _get_book(api, book_id))
+            if not total:
+                await message.answer(get_text("progress_no_total", lang))
+                return
+            value = round(total * min(value, 100) / 100)
+        await _apply_progress(api, book_id, value)
+        card = await render_card(api, book_id, lang, panel="progress")
+    except Exception as e:
+        await message.answer(get_text("error_generic", lang, e=e))
+        return
+    if card:
+        text, kb, cover = card
+        await show_screen(text, kb, message=message, cover_url=cover)
+
+
+@router.message(ProgressStates.waiting_for_page, F.text & ~F.text.startswith("/"))
+async def page_not_a_number(message: Message, state: FSMContext, lang: str):
+    """Anything else typed while we wait for a page is just a search: drop the state and pass it on."""
+    data = await state.get_data()
+    await state.clear()
+    try:
+        await message.bot.delete_message(message.chat.id, data.get("prompt_id"))
+    except Exception:
+        pass
+    from handlers.search import _do_search
+
+    await _do_search(message, message.text.strip(), lang)
+
+
+@router.callback_query(ProgressCallback.filter(F.delta < 0))
+async def finished(callback: CallbackQuery, callback_data: ProgressCallback, lang: str):
+    api = await _api_for(callback, lang)
+    if not api:
+        return
+    try:
+        user_book = await api.get_user_book(callback_data.book_id)
+        read = _current_read(user_book)
+        if read:
+            await api.finish_read(read["id"], total_pages(user_book, await _get_book(api, callback_data.book_id)))
+        await api.add_or_update_book(callback_data.book_id, STATUS_READ)
+        await _show_card(callback, api, callback_data.book_id, lang, panel="rate", after_read=True)
+    except Exception as e:
+        await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
+        return
+    await callback.answer(get_text("status_added", lang, label=get_text("status_3_short", lang)))
 
 
 @router.callback_query(CloseMessageCallback.filter())

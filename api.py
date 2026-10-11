@@ -1,4 +1,5 @@
 import json
+from datetime import date
 
 import httpx
 
@@ -191,8 +192,12 @@ class HardcoverAPI:
                 ) {
                     id
                     rating
-                    book { id title slug release_year
+                    edition { pages }
+                    book { id title slug release_year pages
                         contributions { author { id name } contribution }
+                    }
+                    user_book_reads(where: {finished_at: {_is_null: true}}, order_by: {id: desc}, limit: 1) {
+                        id progress_pages
                     }
                 }
             }
@@ -208,7 +213,11 @@ class HardcoverAPI:
         query GetUserBook($book_id: Int!) {
             me {
                 user_books(where: {book_id: {_eq: $book_id}}, limit: 1) {
-                    id status_id rating
+                    id status_id rating edition_id
+                    edition { pages }
+                    user_book_reads(where: {finished_at: {_is_null: true}}, order_by: {id: desc}, limit: 1) {
+                        id progress_pages started_at
+                    }
                 }
             }
         }
@@ -251,6 +260,41 @@ class HardcoverAPI:
         """
         data = await self.execute_query(gql, {"id": user_book_id, "rating": rating})
         return _checked(data.get("update_user_book"))
+
+    async def set_progress(self, user_book_id: int, read_id: int | None, pages: int, edition_id: int | None) -> dict:
+        """Record the page reached on the current read, creating the read if there is none open."""
+        read = {"progress_pages": pages}
+        if edition_id:
+            read["edition_id"] = edition_id
+        if read_id:
+            gql = """
+            mutation UpdateRead($id: Int!, $read: DatesReadInput!) {
+                update_user_book_read(id: $id, object: $read) { id error }
+            }
+            """
+            data = await self.execute_query(gql, {"id": read_id, "read": read})
+            return _checked(data.get("update_user_book_read"))
+        read["started_at"] = date.today().isoformat()
+        gql = """
+        mutation InsertRead($user_book_id: Int!, $read: DatesReadInput!) {
+            insert_user_book_read(user_book_id: $user_book_id, user_book_read: $read) { id error }
+        }
+        """
+        data = await self.execute_query(gql, {"user_book_id": user_book_id, "read": read})
+        return _checked(data.get("insert_user_book_read"))
+
+    async def finish_read(self, read_id: int, pages: int | None) -> dict:
+        """Close the current read: finished today, progress at the last page when known."""
+        read = {"finished_at": date.today().isoformat()}
+        if pages:
+            read["progress_pages"] = pages
+        gql = """
+        mutation FinishRead($id: Int!, $read: DatesReadInput!) {
+            update_user_book_read(id: $id, object: $read) { id error }
+        }
+        """
+        data = await self.execute_query(gql, {"id": read_id, "read": read})
+        return _checked(data.get("update_user_book_read"))
 
     async def delete_user_book(self, user_book_id: int) -> dict:
         gql = """

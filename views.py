@@ -23,6 +23,23 @@ class BookRow:
     authors: list[str] = field(default_factory=list)
     year: int | None = None
     my_rating: float | None = None
+    progress: tuple[int, int | None] | None = None  # (pages read, total pages or None)
+
+
+def progress_bar(pages: int, total: int | None, lang: str) -> str:
+    if total:
+        pct = min(100, round(pages * 100 / total))
+        filled = round(pct / 10)
+        return f"{'▓' * filled}{'░' * (10 - filled)} {pct}% · " + get_text(
+            "progress_pages", lang, pages=pages, total=total
+        )
+    return get_text("progress_pages_only", lang, pages=pages)
+
+
+def total_pages(user_book: dict | None, book: dict | None) -> int | None:
+    """Pages of the edition the user reads, falling back to the book's default edition."""
+    edition = (user_book or {}).get("edition") or {}
+    return edition.get("pages") or (book or {}).get("pages")
 
 
 def _authors(contributions: list[dict] | None) -> list[str]:
@@ -39,7 +56,9 @@ def _authors(contributions: list[dict] | None) -> list[str]:
     return names
 
 
-def row_from_book(book: dict, my_rating: float | None = None) -> BookRow:
+def row_from_book(
+    book: dict, my_rating: float | None = None, progress: tuple[int, int | None] | None = None
+) -> BookRow:
     """A row from a GraphQL `book` object (shelf / list items)."""
     return BookRow(
         id=book.get("id"),
@@ -48,7 +67,18 @@ def row_from_book(book: dict, my_rating: float | None = None) -> BookRow:
         authors=_authors(book.get("contributions")),
         year=book.get("release_year"),
         my_rating=my_rating,
+        progress=progress,
     )
+
+
+def row_from_user_book(user_book: dict) -> BookRow:
+    """A shelf item: the book plus the user's rating and, for a book in progress, the pages read."""
+    book = user_book.get("book") or {}
+    reads = user_book.get("user_book_reads") or []
+    progress = None
+    if reads and reads[0].get("progress_pages"):
+        progress = (reads[0]["progress_pages"], total_pages(user_book, book))
+    return row_from_book(book, user_book.get("rating"), progress)
 
 
 def dedup_names(names: list[str] | None) -> list[str]:
@@ -93,6 +123,8 @@ def format_row(row: BookRow, lang: str) -> str:
     url = book_url(row)
     if url:
         line += f' <a href="{url}">🔗</a>'
+    if row.progress:
+        line += "\n   " + progress_bar(row.progress[0], row.progress[1], lang)
     return line
 
 
