@@ -19,6 +19,19 @@ def author_names(contributions: list[dict] | None) -> list[str]:
     return [c["author"]["name"] for c in (contributions or []) if is_author(c)]
 
 
+def _first_series(book_series: list[dict] | None) -> dict | None:
+    """The main series as {"name", "position"}: prefer a whole-number position (0.5s are side stories)."""
+    entries = [e for e in (book_series or []) if (e.get("series") or {}).get("name")]
+    if not entries:
+        return None
+    entries.sort(key=lambda e: (float(e.get("position") or 0) % 1 != 0, len(e["series"]["name"])))
+    e = entries[0]
+    pos = e.get("position")
+    if pos is not None:
+        pos = int(pos) if float(pos) == int(pos) else pos
+    return {"name": e["series"]["name"], "position": pos}
+
+
 class HardcoverAPI:
     def __init__(self, token: str):
         self.token = token
@@ -219,9 +232,10 @@ class HardcoverAPI:
         data = await self.execute_query(gql, {"id": user_book_id, "status_id": status_id})
         return data.get("update_user_book", {})
 
-    async def rate_book(self, user_book_id: int, rating: float) -> dict:
+    async def rate_book(self, user_book_id: int, rating: float | None) -> dict:
+        """Set the user's rating (None clears it)."""
         gql = """
-        mutation RateBook($id: Int!, $rating: numeric!) {
+        mutation RateBook($id: Int!, $rating: numeric) {
             update_user_book(id: $id, object: {rating: $rating}) {
                 id rating
             }
@@ -243,11 +257,12 @@ class HardcoverAPI:
         gql = """
         query GetBook($id: Int!) {
             books(where: {id: {_eq: $id}}) {
-                id title slug release_year description
+                id title slug release_year description pages
                 image { url }
                 contributions { author { name } contribution }
                 ratings_count
                 rating
+                book_series { position series { name } }
             }
         }
         """
@@ -267,6 +282,8 @@ class HardcoverAPI:
             "image_url": (b.get("image") or {}).get("url"),
             "rating": b.get("rating"),
             "ratings_count": b.get("ratings_count"),
+            "pages": b.get("pages"),
+            "series": _first_series(b.get("book_series")),
         }
 
     async def get_user_lists(self, book_id: int | None = None) -> list[dict]:

@@ -51,10 +51,20 @@ def row_from_book(book: dict, my_rating: float | None = None) -> BookRow:
     )
 
 
+def dedup_names(names: list[str] | None) -> list[str]:
+    seen: set = set()
+    out = []
+    for n in names or []:
+        key = n.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            out.append(n)
+    return out
+
+
 def row_from_search(book: dict) -> BookRow:
     """A row from a normalized search hit (HardcoverAPI.search_books_page)."""
-    seen: set = set()
-    authors = [a for a in book.get("authors") or [] if not (a.lower() in seen or seen.add(a.lower()))]
+    authors = dedup_names(book.get("authors"))
     return BookRow(
         id=book["id"],
         title=book.get("title") or "?",
