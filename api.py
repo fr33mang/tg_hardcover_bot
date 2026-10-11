@@ -19,6 +19,14 @@ def author_names(contributions: list[dict] | None) -> list[str]:
     return [c["author"]["name"] for c in (contributions or []) if is_author(c)]
 
 
+def _checked(result: dict | None) -> dict:
+    """user_book mutations answer {id, error}: a filled `error` is a failure, not a success."""
+    result = result or {}
+    if result.get("error"):
+        raise ValueError(result["error"])
+    return result
+
+
 def _first_series(book_series: list[dict] | None) -> dict | None:
     """The main series as {"name", "position"}: prefer a whole-number position (0.5s are side stories)."""
     entries = [e for e in (book_series or []) if (e.get("series") or {}).get("name")]
@@ -214,35 +222,35 @@ class HardcoverAPI:
         gql = """
         mutation AddBook($book_id: Int!, $status_id: Int!) {
             insert_user_book(object: {book_id: $book_id, status_id: $status_id}) {
-                id
+                id error
             }
         }
         """
         data = await self.execute_query(gql, {"book_id": book_id, "status_id": status_id})
-        return data.get("insert_user_book", {})
+        return _checked(data.get("insert_user_book"))
 
     async def update_book_status(self, user_book_id: int, status_id: int) -> dict:
         gql = """
         mutation UpdateStatus($id: Int!, $status_id: Int!) {
             update_user_book(id: $id, object: {status_id: $status_id}) {
-                id
+                id error
             }
         }
         """
         data = await self.execute_query(gql, {"id": user_book_id, "status_id": status_id})
-        return data.get("update_user_book", {})
+        return _checked(data.get("update_user_book"))
 
     async def rate_book(self, user_book_id: int, rating: float | None) -> dict:
         """Set the user's rating (None clears it)."""
         gql = """
         mutation RateBook($id: Int!, $rating: numeric) {
             update_user_book(id: $id, object: {rating: $rating}) {
-                id rating
+                id error
             }
         }
         """
         data = await self.execute_query(gql, {"id": user_book_id, "rating": rating})
-        return data.get("update_user_book", {})
+        return _checked(data.get("update_user_book"))
 
     async def delete_user_book(self, user_book_id: int) -> dict:
         gql = """
