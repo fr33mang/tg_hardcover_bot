@@ -105,8 +105,9 @@ def row_from_search(book: dict) -> BookRow:
 
 
 def book_url(row_or_book) -> str | None:
-    slug = row_or_book.slug if isinstance(row_or_book, BookRow) else (row_or_book or {}).get("slug", "")
-    return f"https://hardcover.app/books/{slug}" if slug else None
+    """A stable link by id: Hardcover redirects it to the current slug, which can change over time."""
+    book_id = row_or_book.id if isinstance(row_or_book, BookRow) else (row_or_book or {}).get("id")
+    return f"https://hardcover.app/id/book/{book_id}" if book_id else None
 
 
 def format_row(row: BookRow, lang: str) -> str:

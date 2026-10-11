@@ -16,7 +16,7 @@ from api import HardcoverAPI
 from db import get_nav_context, get_token, set_nav_context
 from i18n import get_text
 from screen import show_screen
-from views import PAGE_SIZE, build_book_list, dedup_names, row_from_search
+from views import PAGE_SIZE, book_url, build_book_list, dedup_names, row_from_search
 
 router = Router()
 
@@ -129,24 +129,27 @@ async def inline_search(inline_query: InlineQuery, lang: str):
 
     results = []
     for book in books:
-        title = book.get("title", "?")
-        slug = book.get("slug", "")
+        title = book.get("title") or "?"
         authors = dedup_names(book.get("authors"))
-        author = ", ".join(authors) if authors else ""
+        author = ", ".join(authors)
+        year = book.get("release_year")
 
-        text = f"<b>{title}</b>"
+        text = f"<b>{html.escape(title)}</b>"
         if author:
-            text += f"\n{author}"
-        if book.get("release_year"):
-            text += f" ({book['release_year']})"
-        if slug:
-            text += f"\nhttps://hardcover.app/books/{slug}"
+            text += f"\n{html.escape(author)}"
+        if year:
+            text += f" ({year})"
+        url = book_url(book)
+        if url:
+            text += f"\n{url}"
 
+        description = " · ".join(str(x) for x in (author, year) if x) or "Hardcover"
         results.append(
             InlineQueryResultArticle(
                 id=str(book["id"]),
                 title=title,
-                description=author or "Hardcover",
+                description=description,
+                thumbnail_url=book.get("image_url"),
                 input_message_content=InputTextMessageContent(message_text=text, parse_mode="HTML"),
             )
         )
