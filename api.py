@@ -4,6 +4,20 @@ import httpx
 
 from config import HARDCOVER_API_URL
 
+# Hardcover used to leave `contribution` empty for the main author and name only the others
+# ("Foreword", "Translator"...). Since autumn 2026 the main author is tagged "Author" explicitly.
+_AUTHOR_ROLES = {"", "author"}
+
+
+def is_author(contribution: dict) -> bool:
+    return (
+        bool(contribution.get("author")) and (contribution.get("contribution") or "").strip().lower() in _AUTHOR_ROLES
+    )
+
+
+def author_names(contributions: list[dict] | None) -> list[str]:
+    return [c["author"]["name"] for c in (contributions or []) if is_author(c)]
+
 
 class HardcoverAPI:
     def __init__(self, token: str):
@@ -49,7 +63,7 @@ class HardcoverAPI:
         for hit in hits:
             doc = hit.get("document", {})
             contributions = doc.get("contributions", [])
-            authors = [c["author"]["name"] for c in contributions if c.get("author") and not c.get("contribution")]
+            authors = author_names(contributions)
             books.append(
                 {
                     "id": int(doc["id"]),
@@ -80,11 +94,7 @@ class HardcoverAPI:
                 b = ed.get("book")
                 if not b:
                     continue
-                authors = [
-                    c["author"]["name"]
-                    for c in (b.get("contributions") or [])
-                    if c.get("author") and not c.get("contribution")
-                ]
+                authors = author_names(b.get("contributions"))
                 books.append(
                     {
                         "id": b["id"],
@@ -235,8 +245,7 @@ class HardcoverAPI:
         if not books:
             return None
         b = books[0]
-        contributions = b.get("contributions") or []
-        authors = [c["author"]["name"] for c in contributions if c.get("author") and not c.get("contribution")]
+        authors = author_names(b.get("contributions"))
         return {
             "id": b["id"],
             "title": b.get("title", ""),
