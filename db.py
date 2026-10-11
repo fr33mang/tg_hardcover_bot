@@ -1,3 +1,5 @@
+import json
+
 import aiosqlite
 
 from config import DATABASE_PATH, FERNET
@@ -17,11 +19,16 @@ async def init_db():
             )
         """)
         await db.commit()
-        try:
-            await db.execute(f"ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT '{DEFAULT_LANG}'")
-            await db.commit()
-        except Exception:
-            pass  # column already exists
+        for ddl in (
+            f"ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT '{DEFAULT_LANG}'",
+            "ALTER TABLE users ADD COLUMN screen_message_id INTEGER",
+            "ALTER TABLE users ADD COLUMN nav_context TEXT",
+        ):
+            try:
+                await db.execute(ddl)
+                await db.commit()
+            except Exception:
+                pass  # column already exists
 
 
 async def save_token(telegram_id: int, token: str, username: str | None = None):
@@ -73,3 +80,38 @@ async def set_language(telegram_id: int, lang: str) -> None:
         )
         await db.commit()
     _lang_cache[telegram_id] = lang
+
+
+# --- screen state: the one "screen" message per chat and where "back" leads ---
+
+
+async def get_screen_message(telegram_id: int) -> int | None:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("SELECT screen_message_id FROM users WHERE telegram_id = ?", (telegram_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
+
+async def set_screen_message(telegram_id: int, message_id: int | None) -> None:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("UPDATE users SET screen_message_id = ? WHERE telegram_id = ?", (message_id, telegram_id))
+        await db.commit()
+
+
+async def get_nav_context(telegram_id: int) -> dict | None:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("SELECT nav_context FROM users WHERE telegram_id = ?", (telegram_id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row or not row[0]:
+                return None
+            try:
+                return json.loads(row[0])
+            except ValueError:
+                return None
+
+
+async def set_nav_context(telegram_id: int, ctx: dict | None) -> None:
+    payload = json.dumps(ctx, ensure_ascii=False) if ctx else None
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("UPDATE users SET nav_context = ? WHERE telegram_id = ?", (payload, telegram_id))
+        await db.commit()

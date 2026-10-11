@@ -20,14 +20,16 @@ from api import HardcoverAPI
 from callbacks import (
     AddBookCallback,
     AddToListCallback,
+    BackCallback,
     BackToBookCallback,
     BookDetailCallback,
     CloseMessageCallback,
     DeleteBookCallback,
     ShowListsCallback,
 )
-from db import get_token
+from db import get_nav_context, get_token, set_nav_context
 from i18n import get_text
+from screen import show_screen
 
 router = Router()
 
@@ -35,8 +37,7 @@ SEARCH_PAGE_SIZE = 5
 
 
 class SearchPageCallback(CallbackData, prefix="search"):
-    query: str
-    page: int
+    page: int  # the query lives in nav_context: callback_data is capped at 64 bytes
 
 
 def _dedup_authors(authors: list[str]) -> list[str]:
@@ -95,13 +96,13 @@ def _build_results_message(books: list[dict], query: str, lang: str, page: int =
     if page > 1:
         nav.append(
             InlineKeyboardButton(
-                text=get_text("btn_prev", lang), callback_data=SearchPageCallback(query=query, page=page - 1).pack()
+                text=get_text("btn_prev", lang), callback_data=SearchPageCallback(page=page - 1).pack()
             )
         )
     if len(books) == SEARCH_PAGE_SIZE:
         nav.append(
             InlineKeyboardButton(
-                text=get_text("btn_next", lang), callback_data=SearchPageCallback(query=query, page=page + 1).pack()
+                text=get_text("btn_next", lang), callback_data=SearchPageCallback(page=page + 1).pack()
             )
         )
     if nav:
@@ -164,7 +165,7 @@ def _build_book_buttons(
     )
     if book_url:
         builder.row(InlineKeyboardButton(text=get_text("btn_open_hardcover", lang), url=book_url))
-    builder.row(InlineKeyboardButton(text=get_text("btn_close", lang), callback_data=CloseMessageCallback().pack()))
+    builder.row(InlineKeyboardButton(text=get_text("btn_back", lang), callback_data=BackCallback().pack()))
     return builder.as_markup()
 
 
@@ -202,6 +203,13 @@ async def text_search(message: Message, lang: str):
     await _do_search(message, message.text.strip(), lang)
 
 
+async def render_search(api: HardcoverAPI, lang: str, query: str, page: int) -> tuple[str, InlineKeyboardMarkup] | None:
+    books = await api.search_books(query, limit=SEARCH_PAGE_SIZE, page=page)
+    if not books:
+        return None
+    return _build_results_message(books, query, lang, page=page)
+
+
 async def _do_search(message: Message, query: str, lang: str):
     token = await get_token(message.from_user.id)
     if not token:
@@ -210,17 +218,17 @@ async def _do_search(message: Message, query: str, lang: str):
 
     api = HardcoverAPI(token)
     try:
-        books = await api.search_books(query, limit=SEARCH_PAGE_SIZE, page=1)
+        screen = await render_search(api, lang, query, page=1)
     except Exception as e:
         await message.answer(get_text("search_error", lang, e=e))
         return
 
-    if not books:
+    if screen is None:
         await message.answer(get_text("no_books_found", lang))
         return
 
-    text, kb = _build_results_message(books, query, lang, page=1)
-    await message.answer(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+    await set_nav_context(message.from_user.id, {"kind": "search", "query": query, "page": 1})
+    await show_screen(*screen, message=message)
 
 
 @router.callback_query(SearchPageCallback.filter())
@@ -230,19 +238,25 @@ async def search_page_callback(callback: CallbackQuery, callback_data: SearchPag
         await callback.answer(get_text("auth_required", lang), show_alert=True)
         return
 
+    ctx = await get_nav_context(callback.from_user.id)
+    if not ctx or ctx.get("kind") != "search":
+        await callback.answer(get_text("search_expired", lang), show_alert=True)
+        return
+    query = ctx["query"]
+
     api = HardcoverAPI(token)
     try:
-        books = await api.search_books(callback_data.query, limit=SEARCH_PAGE_SIZE, page=callback_data.page)
+        screen = await render_search(api, lang, query, page=callback_data.page)
     except Exception as e:
         await callback.answer(get_text("error_generic", lang, e=e), show_alert=True)
         return
 
-    if not books:
+    if screen is None:
         await callback.answer(get_text("no_more_results", lang), show_alert=True)
         return
 
-    text, kb = _build_results_message(books, callback_data.query, lang, page=callback_data.page)
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+    await set_nav_context(callback.from_user.id, {"kind": "search", "query": query, "page": callback_data.page})
+    await show_screen(*screen, callback=callback)
     await callback.answer()
 
 
@@ -253,8 +267,6 @@ async def book_detail_callback(callback: CallbackQuery, callback_data: BookDetai
         await callback.answer(get_text("auth_required", lang), show_alert=True)
         return
 
-    await callback.answer()
-
     api = HardcoverAPI(token)
     try:
         book, user_book = await asyncio.gather(
@@ -262,28 +274,18 @@ async def book_detail_callback(callback: CallbackQuery, callback_data: BookDetai
             api.get_user_book(callback_data.book_id),
         )
     except Exception as e:
-        await callback.message.answer(get_text("load_error", lang, e=e))
+        await callback.answer(get_text("load_error", lang, e=e), show_alert=True)
         return
 
     if not book:
-        await callback.message.answer(get_text("book_not_found", lang))
+        await callback.answer(get_text("book_not_found", lang), show_alert=True)
         return
 
     current_status_id = user_book["status_id"] if user_book else None
-    url = _book_url(book)
     text = _build_book_detail_text(book, lang)
-    kb = _build_book_buttons(book["id"], lang, current_status_id, book_url=url)
-    image_url = book.get("image_url")
-
-    if image_url:
-        await callback.message.answer_photo(
-            photo=image_url,
-            caption=text,
-            parse_mode="HTML",
-            reply_markup=kb,
-        )
-    else:
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+    kb = _build_book_buttons(book["id"], lang, current_status_id, book_url=_book_url(book))
+    await show_screen(text, kb, callback=callback, cover_url=book.get("image_url"))
+    await callback.answer()
 
 
 @router.callback_query(AddBookCallback.filter())
