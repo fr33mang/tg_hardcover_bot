@@ -9,8 +9,9 @@ from aiogram.types import (
 )
 
 from commands import set_user_commands
-from db import set_language
+from db import get_token, set_language
 from i18n import SUPPORTED_LANGS, get_text
+from keyboards import main_keyboard
 
 router = Router()
 
@@ -24,7 +25,7 @@ class LangSelectCallback(CallbackData, prefix="lang"):
     code: str
 
 
-def _language_keyboard(current_lang: str) -> InlineKeyboardMarkup:
+def language_keyboard(current_lang: str) -> InlineKeyboardMarkup:
     buttons = [
         InlineKeyboardButton(
             text=f"● {name}" if code == current_lang else name,
@@ -37,7 +38,7 @@ def _language_keyboard(current_lang: str) -> InlineKeyboardMarkup:
 
 @router.message(Command("language"))
 async def cmd_language(message: Message, lang: str):
-    await message.answer(get_text("language_choose", lang), reply_markup=_language_keyboard(lang))
+    await message.answer(get_text("language_choose", lang), reply_markup=language_keyboard(lang))
 
 
 @router.callback_query(LangSelectCallback.filter())
@@ -49,5 +50,11 @@ async def language_selected(callback: CallbackQuery, callback_data: LangSelectCa
     await set_language(callback.from_user.id, new_lang)
     await set_user_commands(callback.bot, callback.message.chat.id, new_lang)
     name = LANG_NAMES.get(new_lang, new_lang)
-    await callback.answer(get_text("language_set", new_lang, name=name))
-    await callback.message.edit_reply_markup(reply_markup=_language_keyboard(new_lang))
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=language_keyboard(new_lang))
+    except Exception:
+        pass
+    # the reply keyboard carries button labels, so it has to be re-sent in the new language
+    kb = main_keyboard(new_lang) if await get_token(callback.from_user.id) else None
+    await callback.message.answer(get_text("language_set", new_lang, name=name), reply_markup=kb)
