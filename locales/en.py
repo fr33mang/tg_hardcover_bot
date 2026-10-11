@@ -8,42 +8,54 @@ STRINGS: dict[str, str] = {
     "cmd_token": "Authorize with Hardcover token",
     "cmd_logout": "Log out",
     # auth
-    "already_authorized": "You're already authorized. Use /help for a list of commands.",
+    "already_authorized": "You're already signed in. Type a book title to search. Buttons below: reading now, library, settings.",
     "start_welcome": (
-        "👋 Hi! This is a bot for Hardcover.\n\n"
-        "To get started:\n"
-        "1. Open <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
-        "   (or Settings → Account → API Token)\n"
-        "2. Copy your API token and send /token\n\n"
-        "After authorization use /help for a list of commands."
+        "👋 Hi! This is a bot for <b>Hardcover.app</b>: search, shelves and lists right from Telegram.\n\n"
+        "To get started you need a Hardcover API key:\n"
+        "1. Tap the button below — it opens the new-key form with the permissions the bot needs already checked.\n"
+        "2. Give the key a name, pick an expiry and create it.\n"
+        "   If you opened the page yourself, tick these permissions:\n<code>{scopes}</code>\n"
+        "3. Copy the key and <b>just send it here as a plain message</b>, no command needed.\n\n"
+        "<i>The message with the key will be deleted from the chat.</i>"
     ),
     "token_prompt": (
-        "Send your Bearer token from Hardcover.\n"
-        "Get it at <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
-        "(or Settings → Account → API Token)\n\n"
-        "<i>The message with the token will be deleted for security.</i>"
+        "Send your Hardcover API key <b>as a plain message</b> — just paste it into the chat.\n\n"
+        "Don't have one? Tap the button below: it opens the form with the right permissions already checked. "
+        "Name the key, pick an expiry, create and copy it.\n"
+        "If you opened the page yourself, tick these permissions:\n<code>{scopes}</code>\n\n"
+        "<i>The message with the key will be deleted from the chat.</i>"
     ),
-    "token_empty": "Token cannot be empty. Try /token again.",
-    "token_invalid": "Token is invalid. Check it and try /token again.",
-    "auth_success": "✅ Authorized as @{username}\n\nUse /help for a list of commands.",
-    "auth_error": "Authorization failed. Check your token and try /token again.",
-    "logged_out": "You've been logged out. Use /token to authorize again.",
-    "help_unauthorized": (
-        "👋 <b>Hardcover Bot</b>\n\n"
-        "To get started:\n"
-        "1. Open <a href='https://hardcover.app/account/api'>hardcover.app/account/api</a>\n"
-        "   (or Settings → Account → API Token)\n"
-        "2. Copy your API token and send /token"
+    "token_empty": "The key is empty. Send it again.",
+    "token_invalid": (
+        "That key didn't work. Check that you copied all of it and that it hasn't expired, then send it again.\n"
+        "No key yet? Create one with the button below."
     ),
+    "auth_success": (
+        "✅ Signed in as @{username}\n\n" "Type a book title to search. Buttons below: reading now, library, settings."
+    ),
+    "auth_error": "Couldn't verify the key. Try again in a moment.",
+    "logged_out": "Signed out. The key was removed from the bot's database. /start to sign in again.",
     "help_authorized": (
         "📚 <b>Hardcover Bot</b>\n\n"
-        "/search — search for books\n"
-        "/library — your reading library\n"
-        "/import — import from Goodreads CSV\n"
-        "/language — change language\n"
-        "/token — update Hardcover token\n"
-        "/logout — log out"
+        "Type a book title, an author or an ISBN to search.\n\n"
+        "📖 Reading — books in progress\n"
+        "📚 Library — shelves and lists\n"
+        "⚙️ More — language, Goodreads import, key, sign out\n\n"
+        "Commands: /library, /import, /language, /token, /logout"
     ),
+    # reply keyboard + settings screen
+    "btn_menu_reading": "📖 Reading",
+    "btn_menu_library": "📚 Library",
+    "btn_menu_search": "🔍 Search",
+    "btn_menu_more": "⚙️ More",
+    "btn_create_key": "🔑 Create a key on Hardcover",
+    "reading_empty": "📖 You're not reading anything right now.\n\nType a book title — I'll find it and offer to add it.",
+    "search_prompt": "🔍 Type a book title, an author or an ISBN.",
+    "more_title": "⚙️ <b>Settings</b>",
+    "btn_more_language": "🌐 Language",
+    "btn_more_import": "📥 Import from Goodreads",
+    "btn_more_token": "🔑 Update Hardcover key",
+    "btn_more_logout": "🚪 Sign out",
     # search
     "search_usage": "Usage: /search &lt;book title&gt;",
     "auth_required": "Please authorize first: /token",

@@ -8,7 +8,7 @@ from aiogram.enums import ParseMode
 from commands import set_global_commands
 from config import TELEGRAM_BOT_TOKEN
 from db import init_db
-from handlers import auth, import_csv, language, nav, search, shelves
+from handlers import auth, import_csv, language, menu, nav, search, shelves
 from middleware import LanguageMiddleware
 
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +46,7 @@ async def main():
 
     dp.include_router(language.router)
     dp.include_router(auth.router)
+    dp.include_router(menu.router)
     dp.include_router(shelves.router)
     dp.include_router(nav.router)
     dp.include_router(import_csv.router)

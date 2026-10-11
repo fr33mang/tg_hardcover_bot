@@ -34,3 +34,9 @@ class CloseMessageCallback(CallbackData, prefix="close"):
 
 class BackCallback(CallbackData, prefix="back"):
     """Return to the list the user came from (stored in nav_context)."""
+
+
+class MoreCallback(CallbackData, prefix="more"):
+    """An item on the settings screen: language | import | token | logout."""
+
+    action: str
