@@ -8,6 +8,7 @@ from aiogram.types import Message, ReplyKeyboardRemove
 
 from api import HardcoverAPI
 from commands import set_user_commands
+from config import HARDCOVER_SCOPES
 from db import delete_token, get_token, save_token
 from i18n import get_text
 from keyboards import all_menu_texts, main_keyboard, token_keyboard
@@ -22,7 +23,8 @@ class AuthStates(StatesGroup):
 async def _ask_for_token(message: Message, state: FSMContext, lang: str, text_key: str) -> None:
     """Explain how to get a key and wait for it: the next plain message is treated as the key."""
     await state.set_state(AuthStates.waiting_for_token)
-    await message.answer(get_text(text_key, lang), reply_markup=token_keyboard(lang), disable_web_page_preview=True)
+    text = get_text(text_key, lang, scopes=" ".join(HARDCOVER_SCOPES))
+    await message.answer(text, reply_markup=token_keyboard(lang), disable_web_page_preview=True)
 
 
 @router.message(Command("start"))

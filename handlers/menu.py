@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
 from api import HardcoverAPI
 from callbacks import MoreCallback
+from config import HARDCOVER_SCOPES
 from db import delete_token, get_token, set_nav_context
 from handlers.auth import AuthStates
 from handlers.import_csv import ImportStates
@@ -93,9 +94,8 @@ async def more_import(callback: CallbackQuery, state: FSMContext, lang: str):
 @router.callback_query(MoreCallback.filter(F.action == "token"))
 async def more_token(callback: CallbackQuery, state: FSMContext, lang: str):
     await state.set_state(AuthStates.waiting_for_token)
-    await callback.message.answer(
-        get_text("token_prompt", lang), reply_markup=token_keyboard(lang), disable_web_page_preview=True
-    )
+    text = get_text("token_prompt", lang, scopes=" ".join(HARDCOVER_SCOPES))
+    await callback.message.answer(text, reply_markup=token_keyboard(lang), disable_web_page_preview=True)
     await callback.answer()
 
 

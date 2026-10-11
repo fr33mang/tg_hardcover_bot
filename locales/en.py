@@ -14,13 +14,15 @@ STRINGS: dict[str, str] = {
         "To get started you need a Hardcover API key:\n"
         "1. Tap the button below — it opens the new-key form with the permissions the bot needs already checked.\n"
         "2. Give the key a name, pick an expiry and create it.\n"
+        "   If you opened the page yourself, tick these permissions:\n<code>{scopes}</code>\n"
         "3. Copy the key and <b>just send it here as a plain message</b>, no command needed.\n\n"
         "<i>The message with the key will be deleted from the chat.</i>"
     ),
     "token_prompt": (
         "Send your Hardcover API key <b>as a plain message</b> — just paste it into the chat.\n\n"
         "Don't have one? Tap the button below: it opens the form with the right permissions already checked. "
-        "Name the key, pick an expiry, create and copy it.\n\n"
+        "Name the key, pick an expiry, create and copy it.\n"
+        "If you opened the page yourself, tick these permissions:\n<code>{scopes}</code>\n\n"
         "<i>The message with the key will be deleted from the chat.</i>"
     ),
     "token_empty": "The key is empty. Send it again.",
