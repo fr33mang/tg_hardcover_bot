@@ -31,18 +31,20 @@ async def init_db():
                 pass  # column already exists
 
 
-async def save_token(telegram_id: int, token: str, username: str | None = None):
+async def save_token(telegram_id: int, token: str, username: str | None = None, language: str = DEFAULT_LANG):
+    """Store the token; ``language`` only applies to a brand-new user (an existing choice is kept)."""
     encrypted = FERNET.encrypt(token.encode()).decode()
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute(
-            """INSERT INTO users (telegram_id, bearer_token, hardcover_username)
-               VALUES (?, ?, ?)
+            """INSERT INTO users (telegram_id, bearer_token, hardcover_username, language)
+               VALUES (?, ?, ?, ?)
                ON CONFLICT(telegram_id) DO UPDATE SET
                  bearer_token=excluded.bearer_token,
                  hardcover_username=excluded.hardcover_username""",
-            (telegram_id, encrypted, username),
+            (telegram_id, encrypted, username, language),
         )
         await db.commit()
+    _lang_cache.pop(telegram_id, None)
 
 
 async def get_token(telegram_id: int) -> str | None:
@@ -61,15 +63,17 @@ async def delete_token(telegram_id: int):
     _lang_cache.pop(telegram_id, None)
 
 
-async def get_language(telegram_id: int) -> str:
+async def get_language(telegram_id: int) -> str | None:
+    """The user's chosen bot language, or None for someone not in the DB yet."""
     if telegram_id in _lang_cache:
         return _lang_cache[telegram_id]
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute("SELECT language FROM users WHERE telegram_id = ?", (telegram_id,)) as cursor:
             row = await cursor.fetchone()
-            lang = row[0] if row else DEFAULT_LANG
-    _lang_cache[telegram_id] = lang
-    return lang
+    if not row:
+        return None
+    _lang_cache[telegram_id] = row[0]
+    return row[0]
 
 
 async def set_language(telegram_id: int, lang: str) -> None:

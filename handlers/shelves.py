@@ -4,7 +4,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from api import HardcoverAPI
+from api import HardcoverAPI, is_author
 from callbacks import BookDetailCallback
 from db import get_token, set_nav_context
 from i18n import get_text
@@ -35,9 +35,9 @@ def _dedup_authors_by_id(contribs: list[dict]) -> list[str]:
     seen_ids = set()
     names = []
     for c in contribs:
-        author = c.get("author")
-        if not author or c.get("contribution"):
+        if not is_author(c):
             continue
+        author = c["author"]
         aid = author.get("id")
         if aid and aid in seen_ids:
             continue

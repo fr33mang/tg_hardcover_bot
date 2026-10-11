@@ -2,8 +2,8 @@
 
 Every navigable view in the bot is rendered into a single "screen" message per chat.
 Inline-button taps edit that message in place; a reply-keyboard tap or a typed query
-starts a fresh screen message and cleans up the previous one, so the chat never fills
-up with dead cards.
+starts a fresh screen message and cleans up the previous one together with the user's
+own tap/query message, so the chat never fills up with dead cards or a trail of taps.
 
 Covers are shown as a link preview above the text instead of a photo message, so the
 screen stays a text message and can always be edited into any other screen.
@@ -68,6 +68,13 @@ async def show_screen(
 
     sent = await bot.send_message(chat_id, text, reply_markup=kb, link_preview_options=_preview(cover_url))
     await set_screen_message(user_id, sent.message_id)
+    if message is not None:
+        # the tap or query that opened this screen is now redundant: the screen itself shows the
+        # result (and a search echoes its query), so take it out too and keep the chat to one screen
+        try:
+            await message.delete()
+        except Exception:
+            pass
 
 
 async def _cleanup(bot: Bot, chat_id: int, message_id: int) -> None:
