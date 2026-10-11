@@ -8,7 +8,7 @@ from api import HardcoverAPI
 from db import get_token, set_nav_context
 from i18n import get_text
 from screen import show_screen
-from views import PAGE_SIZE, build_book_list, row_from_book
+from views import PAGE_SIZE, build_book_list, row_from_book, row_from_user_book
 
 router = Router()
 
@@ -99,7 +99,7 @@ async def render_shelf(api: HardcoverAPI, lang: str, status_id: int, offset: int
     items, total = await api.get_shelf_books(status_id, limit=PAGE_SIZE, offset=offset)
     if not items:
         return None
-    rows = [row_from_book(ub.get("book") or {}, ub.get("rating")) for ub in items]
+    rows = [row_from_user_book(ub) for ub in items]
     title = f"<b>{get_text(f'status_{status_id}', lang)}</b>"
     prev_cb = ShelfPageCallback(status_id=status_id, offset=offset - PAGE_SIZE).pack() if offset > 0 else None
     next_cb = (

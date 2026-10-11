@@ -94,6 +94,15 @@ STRINGS: dict[str, str] = {
     "rated_toast": "⭐ {rating}",
     "rating_removed": "Rating removed",
     "pages_short": "{pages} pp.",
+    # reading progress
+    "btn_progress": "📍 Progress",
+    "btn_enter_page": "✏️ Enter page",
+    "btn_finished": "✅ Finished",
+    "progress_pages": "p. {pages}/{total}",
+    "progress_pages_only": "p. {pages}",
+    "progress_prompt": "Type the page you're on (e.g. 240) or a percentage (48%).",
+    "progress_no_total": "This edition has no page count, so a percentage can't be converted. Type the page number.",
+    "progress_toast": "📍 p. {pages}",
     # shelves
     "library_title": "📖 <b>Library</b>",
     "list_empty": "List is empty.",

@@ -58,3 +58,10 @@ class RateCallback(CallbackData, prefix="rate"):
 
     book_id: int
     half: int
+
+
+class ProgressCallback(CallbackData, prefix="prog"):
+    """delta > 0: add pages; 0: ask for a page number; -1: finished the book."""
+
+    book_id: int
+    delta: int

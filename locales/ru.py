@@ -95,6 +95,15 @@ STRINGS: dict[str, str] = {
     "rated_toast": "⭐ {rating}",
     "rating_removed": "Оценка убрана",
     "pages_short": "{pages} стр.",
+    # reading progress
+    "btn_progress": "📍 Прогресс",
+    "btn_enter_page": "✏️ Ввести страницу",
+    "btn_finished": "✅ Дочитал",
+    "progress_pages": "стр. {pages}/{total}",
+    "progress_pages_only": "стр. {pages}",
+    "progress_prompt": "Напиши номер страницы (например 240) или процент (48%).",
+    "progress_no_total": "У этого издания не указано число страниц — проценты не посчитать. Напиши номер страницы.",
+    "progress_toast": "📍 стр. {pages}",
     # shelves
     "library_title": "📖 <b>Библиотека</b>",
     "list_empty": "Список пуст.",
